@@ -2333,6 +2333,11 @@ class AioHttpWsAdapter:
         return msg.data
 
 
+async def health_check_handler(request):
+    """Simple health check endpoint for Render / monitoring services."""
+    return web.Response(text="OK", content_type="text/plain")
+
+
 async def handle_download_http(request):
     """Serves file downloads like /download/worker_sftp.py via aiohttp."""
     filename = request.match_info.get("filename", "")
@@ -2790,6 +2795,8 @@ async def main():
     # 1. Setup unified aiohttp application
     app = web.Application(client_max_size=50 * 1024 * 1024)
     app.router.add_get("/", unified_root_handler)
+    app.router.add_get("/health", health_check_handler)
+    app.router.add_get("/ping", health_check_handler)
     app.router.add_get("/agent", agent_ws_handler)
     app.router.add_get("/ws", dashboard_ws_handler)
     app.router.add_get("/download/{filename}", handle_download_http)
