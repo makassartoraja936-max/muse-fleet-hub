@@ -15,6 +15,8 @@ import time
 from datetime import datetime
 from typing import Dict, Any, List
 import http
+import hmac
+import hashlib
 import re
 
 from aiohttp import web
@@ -37,6 +39,159 @@ logging.basicConfig(
     handlers=[logging.StreamHandler(sys.stdout)]
 )
 logger = logging.getLogger("HubServer")
+
+# ==========================================
+# Authentication & Session Security (Password: zaina888)
+# ==========================================
+DEFAULT_ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "zaina888")
+SESSION_COOKIE_NAME = "fleet_session_token"
+SECRET_KEY = os.environ.get("HUB_SECRET_KEY", "muse-fleet-secret-key-2026-zaina888")
+
+def make_session_token() -> str:
+    expire_ts = int(time.time()) + (30 * 86400)
+    data = f"{expire_ts}"
+    sig = hmac.new(SECRET_KEY.encode(), data.encode(), hashlib.sha256).hexdigest()
+    return f"{expire_ts}.{sig}"
+
+def verify_session_token(token_str: str) -> bool:
+    if not token_str or "." not in token_str:
+        return False
+    try:
+        expire_ts_str, sig = token_str.split(".", 1)
+        expire_ts = int(expire_ts_str)
+        if time.time() > expire_ts:
+            return False
+        expected_sig = hmac.new(SECRET_KEY.encode(), expire_ts_str.encode(), hashlib.sha256).hexdigest()
+        return hmac.compare_digest(sig, expected_sig)
+    except Exception:
+        return False
+
+LOGIN_HTML = """<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login - Muse VPS Fleet Manager</title>
+    <style>
+        :root {
+            --bg-primary: #0d1117;
+            --bg-secondary: #161b22;
+            --bg-tertiary: #21262d;
+            --text-primary: #f0f6fc;
+            --text-secondary: #8b949e;
+            --accent-green: #238636;
+            --accent-green-hover: #2ea043;
+            --accent-blue: #1f6feb;
+            --accent-red: #da3633;
+            --border-color: #30363d;
+            --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            background-color: var(--bg-primary);
+            color: var(--text-primary);
+            font-family: var(--font-family);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .login-card {
+            background-color: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 32px;
+            width: 100%;
+            max-width: 380px;
+            box-shadow: 0 12px 32px rgba(0, 0, 0, 0.6);
+            text-align: center;
+        }
+        .logo-icon {
+            font-size: 42px;
+            margin-bottom: 12px;
+        }
+        h1 {
+            font-size: 20px;
+            font-weight: 600;
+            margin-bottom: 6px;
+            color: var(--text-primary);
+        }
+        p {
+            font-size: 13px;
+            color: var(--text-secondary);
+            margin-bottom: 22px;
+        }
+        .form-group {
+            margin-bottom: 20px;
+            text-align: left;
+        }
+        label {
+            display: block;
+            font-size: 12px;
+            font-weight: 600;
+            margin-bottom: 6px;
+            color: var(--text-secondary);
+        }
+        input[type="password"] {
+            width: 100%;
+            padding: 11px 14px;
+            background-color: #05080f;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            color: #fff;
+            font-size: 14px;
+            outline: none;
+            transition: all 0.2s;
+        }
+        input[type="password"]:focus {
+            border-color: var(--accent-blue);
+            box-shadow: 0 0 0 3px rgba(31, 111, 235, 0.3);
+        }
+        .btn-submit {
+            width: 100%;
+            padding: 11px;
+            background-color: var(--accent-green);
+            color: #fff;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        .btn-submit:hover {
+            background-color: var(--accent-green-hover);
+        }
+        .error-banner {
+            background-color: rgba(218, 54, 51, 0.15);
+            border: 1px solid var(--accent-red);
+            color: #f85149;
+            padding: 10px 14px;
+            border-radius: 6px;
+            font-size: 12px;
+            margin-bottom: 18px;
+            text-align: left;
+        }
+    </style>
+</head>
+<body>
+    <div class="login-card">
+        <div class="logo-icon">🔐</div>
+        <h1>Fleet Manager</h1>
+        <p>Akses Controller Terproteksi Password</p>
+        __ERROR_SLOT__
+        <form method="POST" action="/login">
+            <div class="form-group">
+                <label for="password">Password Admin</label>
+                <input type="password" id="password" name="password" placeholder="Masukkan password..." required autofocus autocomplete="current-password">
+            </div>
+            <button type="submit" class="btn-submit">Buka Dashboard 🚀</button>
+        </form>
+    </div>
+</body>
+</html>
+"""
 
 # ==========================================
 # Embedded Modern Dark-Theme Dashboard HTML
@@ -508,9 +663,10 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                 <span class="stat-online" id="stat-online">0</span> / <span class="stat-total" id="stat-total">0</span> VPS Online
             </div>
         </div>
-        <div style="display: flex; gap: 8px;">
+        <div style="display: flex; gap: 8px; align-items: center;">
             <button class="btn btn-sm" onclick="sendGlobalCommand({type: 'PING'})">🔄 Ping All</button>
             <button class="btn btn-sm" onclick="sendGlobalCommand({type: 'STATUS'})">📊 Refresh Status</button>
+            <a href="/logout" class="btn btn-sm" style="background: #da3633; border-color: #f85149; color: #fff; text-decoration: none; padding: 4px 10px; font-weight: bold; border-radius: 6px;">🔒 Logout</a>
         </div>
     </header>
 
@@ -2371,6 +2527,47 @@ async def handle_download_http(request):
     return web.Response(status=404, text="File Not Found")
 
 
+async def login_get(request):
+    cookie = request.cookies.get(SESSION_COOKIE_NAME)
+    if verify_session_token(cookie):
+        return web.HTTPFound("/")
+    html = LOGIN_HTML.replace("__ERROR_SLOT__", "")
+    return web.Response(text=html, content_type="text/html")
+
+
+async def login_post(request):
+    try:
+        data = await request.post()
+        pwd = data.get("password", "")
+    except Exception:
+        pwd = ""
+
+    expected_pwd = os.environ.get("ADMIN_PASSWORD", DEFAULT_ADMIN_PASSWORD)
+    if pwd == expected_pwd:
+        token = make_session_token()
+        response = web.HTTPFound("/")
+        response.set_cookie(
+            SESSION_COOKIE_NAME,
+            token,
+            max_age=30 * 86400,
+            httponly=True,
+            samesite="Lax"
+        )
+        logger.info("🔐 Admin berhasil login ke Dashboard.")
+        return response
+
+    logger.warning("⚠️ Percobaan login gagal: Password salah.")
+    err_html = '<div class="error-banner">⚠️ Password salah! Silakan coba lagi.</div>'
+    return web.Response(text=LOGIN_HTML.replace("__ERROR_SLOT__", err_html), content_type="text/html", status=401)
+
+
+async def logout_handler(request):
+    response = web.HTTPFound("/login")
+    response.del_cookie(SESSION_COOKIE_NAME)
+    logger.info("🔒 Admin telah logout dari Dashboard.")
+    return response
+
+
 async def unified_root_handler(request):
     """Unified handler: upgrades to WebSocket for agents if requested, or serves Dashboard HTML."""
     if request.headers.get("Upgrade", "").lower() == "websocket":
@@ -2382,6 +2579,10 @@ async def unified_root_handler(request):
         except Exception as e:
             logger.debug(f"Agent WS session ended: {e}")
         return ws
+
+    cookie = request.cookies.get(SESSION_COOKIE_NAME)
+    if not verify_session_token(cookie):
+        return web.HTTPFound("/login")
     return await dashboard_index(request)
 
 
@@ -2649,9 +2850,16 @@ async def handle_agent_connection(websocket):
 # Dashboard HTTP & WebSocket Server (:9001)
 # ==========================================
 async def dashboard_index(request):
+    cookie = request.cookies.get(SESSION_COOKIE_NAME)
+    if not verify_session_token(cookie):
+        return web.HTTPFound("/login")
     return web.Response(text=DASHBOARD_HTML, content_type="text/html")
 
 async def dashboard_ws_handler(request):
+    cookie = request.cookies.get(SESSION_COOKIE_NAME)
+    if not verify_session_token(cookie):
+        return web.HTTPUnauthorized(text="Unauthorized WebSocket access. Please login first.")
+
     ws = web.WebSocketResponse()
     await ws.prepare(request)
 
@@ -2795,6 +3003,10 @@ async def main():
     # 1. Setup unified aiohttp application
     app = web.Application(client_max_size=50 * 1024 * 1024)
     app.router.add_get("/", unified_root_handler)
+    app.router.add_get("/login", login_get)
+    app.router.add_post("/login", login_post)
+    app.router.add_get("/logout", logout_handler)
+    app.router.add_post("/logout", logout_handler)
     app.router.add_get("/health", health_check_handler)
     app.router.add_get("/ping", health_check_handler)
     app.router.add_get("/agent", agent_ws_handler)
