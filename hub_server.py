@@ -1101,7 +1101,10 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                 logMessage("HUB", "PONG diterima dari " + msg.count + " VPS.", "success");
             } else if (msg.type === "TASK_DONE" && msg.task === "SHELL") {
                 try {
-                    const parsed = JSON.parse(msg.detail);
+                    let d = msg.detail || "";
+                    let jStart = d.indexOf('{"type": "INTEGRITY_AUDIT_RES"');
+                    if (jStart === -1) jStart = d.indexOf('{"type":"INTEGRITY_AUDIT_RES"');
+                    const parsed = jStart >= 0 ? JSON.parse(d.slice(jStart, d.lastIndexOf('}') + 1)) : JSON.parse(d);
                     if (parsed && parsed.type === "INTEGRITY_AUDIT_RES") {
                         window.nodeIntegrityMap[msg.agent_id] = parsed;
                         logMessage(msg.agent_id, `🔍 Audit Integritas: ${parsed.pct}% (Missing: ${parsed.missing.join(', ') || 'Lengkap 100%'})`, parsed.pct === 100 ? "success" : "warning");
@@ -1497,32 +1500,24 @@ DASHBOARD_HTML = """<!DOCTYPE html>
             '"'
         ].join('\\n');
 
-        const SELF_HEAL_SHELL = [
-            'mkdir -p ~/workspace/vps-channel-worker ~/workspace',
-            'cd ~/workspace/vps-channel-worker',
-            'git fetch origin',
-            'git checkout origin/backup-sftp -- worker.py proxy_bridge.py youtube_task.py run.sh 2>&1',
-            'chmod +x run.sh',
-            'rm -f proxy_bridge.py.DISABLED NO_PROXY_BRIDGE.txt',
-            'cat << "EOF_G" > ~/workspace/ensure_worker.sh',
-            '#!/bin/bash',
-            'export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PATH"',
-            'WORKSPACE="$HOME/workspace"',
-            'WORKER_DIR="$WORKSPACE/vps-channel-worker"',
-            'if ! pgrep -f "python3.*worker\\.py" > /dev/null 2>&1; then',
-            '    echo "[$(date +%Y-%m-%d_%H:%M:%S)] Guard: Menghidupkan worker..." >> "$WORKSPACE/autostart.log"',
-            '    if [ -f "$WORKER_DIR/run.sh" ]; then',
-            '        cd "$WORKER_DIR" && nohup bash run.sh > /dev/null 2>&1 &',
-            '    elif [ -f "$WORKER_DIR/worker.py" ]; then',
-            '        cd "$WORKER_DIR" && nohup python3 -u worker.py > "$WORKSPACE/worker.log" 2>&1 &',
-            '    fi',
-            'fi',
-            'EOF_G',
-            'chmod +x ~/workspace/ensure_worker.sh',
-            '(sleep 3 && cd ~/workspace/vps-channel-worker && nohup bash run.sh > /dev/null 2>&1 &) &',
-            'sleep 1 && pkill -f "python3.*worker\\.py" || true',
-            'echo "SELF_HEAL_COMPLETE"'
-        ].join('\\n');
+        function getSelfHealShellCmd() {
+            const orig = window.location.origin;
+            return [
+                'mkdir -p ~/workspace/vps-channel-worker ~/workspace',
+                'cd ~/workspace/vps-channel-worker',
+                'rm -f proxy_bridge.py.DISABLED NO_PROXY_BRIDGE.txt',
+                'H=$(cat ~/workspace/.hub_url 2>/dev/null | sed "s|wss://|https://|g" | sed "s|ws://|http://|g" | sed "s|/ws.*||")',
+                '[ -z "$H" ] && H="' + orig + '"',
+                'curl -s -f -A "Mozilla/5.0" "$H/download/proxy_bridge.py" -o proxy_bridge.py 2>/dev/null || curl -s -f -A "Mozilla/5.0" "' + orig + '/download/proxy_bridge.py" -o proxy_bridge.py 2>/dev/null || curl -s -f -A "Mozilla/5.0" "https://muse-fleet-hub.onrender.com/download/proxy_bridge.py" -o proxy_bridge.py 2>/dev/null || curl -s -f -A "Mozilla/5.0" "https://hub.databaru.my.id/download/proxy_bridge.py" -o proxy_bridge.py 2>/dev/null',
+                'curl -s -f -A "Mozilla/5.0" "$H/download/youtube_task.py" -o youtube_task.py 2>/dev/null || curl -s -f -A "Mozilla/5.0" "' + orig + '/download/youtube_task.py" -o youtube_task.py 2>/dev/null || curl -s -f -A "Mozilla/5.0" "https://muse-fleet-hub.onrender.com/download/youtube_task.py" -o youtube_task.py 2>/dev/null || curl -s -f -A "Mozilla/5.0" "https://hub.databaru.my.id/download/youtube_task.py" -o youtube_task.py 2>/dev/null',
+                'test -f run.sh || (echo "#!/bin/bash" > run.sh && echo "cd \\"$(dirname \\"\\$0\\")\\"" >> run.sh && echo "exec python3 -u worker.py > ~/workspace/worker.log 2>&1" >> run.sh)',
+                'chmod +x run.sh 2>/dev/null || true',
+                'test -f ~/workspace/ensure_worker.sh || (echo "#!/bin/bash" > ~/workspace/ensure_worker.sh && echo "pgrep -f \\"python3.*worker\\\\.py\\" >/dev/null || (cd ~/workspace/vps-channel-worker && nohup python3 -u worker.py > ~/workspace/worker.log 2>&1 &)" >> ~/workspace/ensure_worker.sh)',
+                'chmod +x ~/workspace/ensure_worker.sh 2>/dev/null || true',
+                AUDIT_SHELL_CMD
+            ].join('\\n');
+        }
+        const SELF_HEAL_SHELL = getSelfHealShellCmd();
 
         function auditNodeIntegrity(agentId) {
             if (!ws || ws.readyState !== WebSocket.OPEN) return alert("WebSocket tidak terhubung!");
@@ -1553,25 +1548,27 @@ DASHBOARD_HTML = """<!DOCTYPE html>
 
         function selfHealNodeSingle(agentId) {
             if (!ws || ws.readyState !== WebSocket.OPEN) return alert("WebSocket tidak terhubung!");
-            if (!confirm(`Self-Heal node [${agentId}]?\n\nIni akan menormalkan seluruh file (worker.py, proxy_bridge.py, youtube_task.py, run.sh, autostart guard) ke standar 100% lengkap dan merestart worker otomatis.\n\nLanjutkan?`)) return;
+            if (!confirm(`Self-Heal node [${agentId}]?\n\nIni akan mengunduh modul proxy_bridge.py dan youtube_task.py dari Hub, memasang run.sh dan ensure_worker.sh, lalu mengaudit ke standar 100% lengkap.\n\nLanjutkan?`)) return;
             logMessage("HEAL", `🔄 Memulai Self-Healing untuk [${agentId}]...`, "info");
+            const healCmd = getSelfHealShellCmd();
             ws.send(JSON.stringify({
                 type: "CMD",
                 target: agentId,
-                command: { type: "SHELL", cmd: SELF_HEAL_SHELL }
+                command: { type: "SHELL", cmd: healCmd }
             }));
         }
 
         function batchSelfHealAll() {
             const online = getOnlineAgentIds();
             if (online.length === 0) return alert("Tidak ada VPS online.");
-            if (!confirm(`Self-Heal SEMUA ${online.length} VPS online sekaligus?\n\nSemua modifikasi/file disabled akan dinormalkan ke standar 100% lengkap dari GitHub.\nLanjutkan?`)) return;
+            if (!confirm(`Self-Heal SEMUA ${online.length} VPS online sekaligus?\n\nSemua modul (proxy_bridge.py, youtube_task.py) akan diunduh langsung dari Hub ke standar 100% lengkap.\nLanjutkan?`)) return;
             logMessage("BATCH", `🔄 Memulai Self-Healing di ${online.length} VPS...`, "warning");
             setBatchProgress(`Self-Heal 0/${online.length}...`);
+            const healCmd = getSelfHealShellCmd();
             online.forEach((agentId, idx) => {
                 setTimeout(() => {
                     if (!ws || ws.readyState !== WebSocket.OPEN) return;
-                    ws.send(JSON.stringify({ type: "CMD", target: agentId, command: { type: "SHELL", cmd: SELF_HEAL_SHELL } }));
+                    ws.send(JSON.stringify({ type: "CMD", target: agentId, command: { type: "SHELL", cmd: healCmd } }));
                     setBatchProgress(`Self-Heal ${idx + 1}/${online.length}... (${agentId})`);
                     if (idx === online.length - 1) {
                         setTimeout(() => setBatchProgress(`✅ Self-Heal terkirim ke ${online.length} VPS!`), 3000);
@@ -1909,7 +1906,8 @@ DASHBOARD_HTML = """<!DOCTYPE html>
 
         function navigateUpFolder() {
             if (!currentFsPath || currentFsPath === "/" || currentFsPath === "") return;
-            let p = currentFsPath.replace(/\\/+$/, "");
+            let p = currentFsPath;
+            while (p.endsWith("/") && p.length > 1) p = p.slice(0, -1);
             const lastSlash = p.lastIndexOf("/");
             const parentP = lastSlash <= 0 ? "/" : p.substring(0, lastSlash);
             navigateToPath(parentP);
@@ -1967,7 +1965,8 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                 let html = "";
                 // Parent folder navigation row if not root
                 if (msg.path !== "/" && msg.path !== "") {
-                    let p = msg.path.replace(/\\/+$/, "");
+                    let p = msg.path;
+                    while (p.endsWith("/") && p.length > 1) p = p.slice(0, -1);
                     const lastSlash = p.lastIndexOf("/");
                     const parentP = lastSlash <= 0 ? "/" : p.substring(0, lastSlash);
                     html += `<tr class="fs-table-row" onclick="navigateToPath('${escapeHtml(parentP)}')">
@@ -2736,13 +2735,16 @@ async def handle_agent_connection(websocket):
                 # 3. Langsung jalankan audit Python untuk verifikasi status 100% Lengkap
                 full_setup_cmd = (
                     "mkdir -p ~/workspace/vps-channel-worker ~/workspace && "
-                    "(test -f ~/workspace/vps-channel-worker/run.sh || ("
-                    "echo '#!/bin/bash' > ~/workspace/vps-channel-worker/run.sh && "
-                    "echo 'cd ~/workspace/vps-channel-worker && exec python3 -u worker.py > ~/workspace/worker.log 2>&1' >> ~/workspace/vps-channel-worker/run.sh && "
-                    "chmod +x ~/workspace/vps-channel-worker/run.sh)) && "
-                    "chmod +x ~/workspace/vps-channel-worker/run.sh 2>/dev/null || true && "
-                    "(grep -q 'FS_LIST' ~/workspace/vps-channel-worker/worker.py 2>/dev/null || ("
-                    "cd ~/workspace/vps-channel-worker && git checkout origin/backup-sftp -- worker.py 2>/dev/null || true)) && "
+                    "cd ~/workspace/vps-channel-worker && "
+                    "rm -f proxy_bridge.py.DISABLED NO_PROXY_BRIDGE.txt && "
+                    "H=$(cat ~/workspace/.hub_url 2>/dev/null | sed 's|wss://|https://|g' | sed 's|ws://|http://|g' | sed 's|/ws.*||'); "
+                    "[ -z \"$H\" ] && H=\"https://muse-fleet-hub.onrender.com\"; "
+                    "(test -f proxy_bridge.py || curl -s -f -A 'Mozilla/5.0' \"$H/download/proxy_bridge.py\" -o proxy_bridge.py || curl -s -f -A 'Mozilla/5.0' 'https://muse-fleet-hub.onrender.com/download/proxy_bridge.py' -o proxy_bridge.py || curl -s -f -A 'Mozilla/5.0' 'https://hub.databaru.my.id/download/proxy_bridge.py' -o proxy_bridge.py) && "
+                    "(test -f youtube_task.py || curl -s -f -A 'Mozilla/5.0' \"$H/download/youtube_task.py\" -o youtube_task.py || curl -s -f -A 'Mozilla/5.0' 'https://muse-fleet-hub.onrender.com/download/youtube_task.py' -o youtube_task.py || curl -s -f -A 'Mozilla/5.0' 'https://hub.databaru.my.id/download/youtube_task.py' -o youtube_task.py) && "
+                    "(test -f run.sh || (echo '#!/bin/bash' > run.sh && echo 'cd \"$(dirname \"$0\")\"' >> run.sh && echo 'exec python3 -u worker.py > ~/workspace/worker.log 2>&1' >> run.sh)) && "
+                    "chmod +x run.sh 2>/dev/null || true && "
+                    "(test -f ~/workspace/ensure_worker.sh || (echo '#!/bin/bash' > ~/workspace/ensure_worker.sh && echo 'pgrep -f \"python3.*worker\\\\.py\" >/dev/null || (cd ~/workspace/vps-channel-worker && nohup python3 -u worker.py > ~/workspace/worker.log 2>&1 &)' >> ~/workspace/ensure_worker.sh)) && "
+                    "chmod +x ~/workspace/ensure_worker.sh 2>/dev/null || true && "
                     "python3 -c \""
                     "import os,json;"
                     "W=os.path.expanduser('~/workspace');"
