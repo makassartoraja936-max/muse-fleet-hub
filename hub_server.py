@@ -838,12 +838,18 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                     <div class="card-header">
                         <span>Eksekusi Perintah Shell Bash</span>
                     </div>
+                    <div class="form-group" style="margin-bottom: 12px;">
+                        <label>Target VPS:</label>
+                        <select id="shell-agent-select" style="width: 100%; padding: 8px 12px; background: var(--bg-tertiary); border: 1px solid var(--border-color); color: var(--text-primary); border-radius: 6px;">
+                            <option value="ALL">⚡ SEMUA VPS (Broadcast ke Seluruh Armada)</option>
+                        </select>
+                    </div>
                     <div class="form-group" style="margin-bottom: 16px;">
                         <label>Perintah Bash:</label>
-                        <input type="text" id="shell-cmd" placeholder="uptime; free -m; df -h">
+                        <input type="text" id="shell-cmd" placeholder="uptime; free -m; df -h" onkeydown="if(event.key==='Enter') sendShellCommand()">
                     </div>
                     <div class="btn-group">
-                        <button class="btn btn-blue" onclick="sendShellCommand('ALL')">⚡ Kirim ke SEMUA VPS</button>
+                        <button class="btn btn-blue" onclick="sendShellCommand()">⚡ Jalankan Perintah</button>
                     </div>
                 </div>
             </div>
@@ -1214,6 +1220,16 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                 }
             }
 
+            const shellSel = document.getElementById("shell-agent-select");
+            if (shellSel) {
+                const curVal = shellSel.value || "ALL";
+                shellSel.innerHTML = `<option value="ALL">⚡ SEMUA VPS (Broadcast ke Seluruh Armada)</option>` +
+                    agentList.map(a => `<option value="${a.agent_id}">${a.vps_name || a.agent_id} (${a.agent_id.slice(0, 10)})</option>`).join("");
+                if ([...shellSel.options].some(o => o.value === curVal)) {
+                    shellSel.value = curVal;
+                }
+            }
+
             if (agentList.length === 0) {
                 tbody.innerHTML = `<tr><td colspan="9" style="text-align: center; color: var(--text-secondary); padding: 30px;">
                     Belum ada VPS yang terhubung. Silakan pasang agent.py di VPS Muse.
@@ -1256,6 +1272,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                     <td><span style="color: ${tasks !== 'Idle' ? '#388bfd' : 'inherit'}">${tasks}</span></td>
                     <td>
                         <button class="btn btn-sm" onclick="pingSingle('${a.agent_id}')">Ping</button>
+                        ${isOnline ? `<button class="btn btn-sm" style="background: #1f6feb; border-color: #388bfd; margin-left: 4px;" onclick="promptShellSingle('${a.agent_id}', '${escapeHtml(a.vps_name || a.agent_id)}')" title="Jalankan Perintah Bash di VPS ini">💻 Shell</button>` : ''}
                         ${isOnline ? `<button class="btn btn-sm" style="background: #238636; border-color: #2ea043; margin-left: 4px;" onclick="selfHealNodeSingle('${a.agent_id}')" title="Self-Heal: Normalkan semua file ke standar 100% lengkap">🔄 Self-Heal</button>` : ''}
                         ${isOnline ? `<button class="btn btn-sm" style="background: #21262d; border-color: #30363d; margin-left: 4px;" onclick="auditNodeIntegrity('${a.agent_id}')" title="Cek kelengkapan file (Audit 0-100%)">🔍</button>` : ''}
                         <button class="btn btn-sm btn-danger" onclick="stopMiningSingle('${a.agent_id}')">Stop</button>
@@ -1802,11 +1819,42 @@ DASHBOARD_HTML = """<!DOCTYPE html>
             logMessage("MINING", `Mengirim perintah ${action} Mining ke SEMUA VPS.`, "warning");
         }
 
+        function promptShellSingle(agentId, vpsName) {
+            const displayName = vpsName || agentId;
+            const cmd = prompt(`💻 Jalankan Perintah Bash di [${displayName}]:\n\nContoh:\n- python3 -c "import playwright; print('PLAYWRIGHT_READY')"\n- ps aux | grep python\n- free -m`, "python3 -c \"import playwright; print('PLAYWRIGHT_READY')\" 2>&1");
+            if (!cmd || !cmd.trim()) return;
+            const trimmedCmd = cmd.trim();
+            if (!ws || ws.readyState !== WebSocket.OPEN) return alert("WebSocket dashboard tidak terhubung!");
+            ws.send(JSON.stringify({
+                type: "CMD",
+                target: agentId,
+                command: { type: "SHELL", cmd: trimmedCmd, auth: "muse-fleet-auth-2026" }
+            }));
+            logMessage(displayName, `💻 [SHELL]: Mengirim perintah -> ${trimmedCmd}`, "info");
+        }
+
         function sendShellCommand(target) {
-            const cmd = document.getElementById("shell-cmd").value.trim();
-            if (!cmd) return alert("Masukkan perintah!");
-            sendGlobalCommand({ type: "SHELL", cmd: cmd, auth: "muse-fleet-auth-2026" });
-            logMessage("SHELL", "Menjalankan perintah bash di SEMUA VPS: " + cmd, "info");
+            const cmdInput = document.getElementById("shell-cmd");
+            const cmd = cmdInput ? cmdInput.value.trim() : "";
+            if (!cmd) return alert("Masukkan perintah bash!");
+            const sel = document.getElementById("shell-agent-select");
+            const chosenTarget = target || (sel ? sel.value : "ALL") || "ALL";
+
+            if (!ws || ws.readyState !== WebSocket.OPEN) return alert("WebSocket dashboard tidak terhubung!");
+
+            if (chosenTarget === "ALL") {
+                sendGlobalCommand({ type: "SHELL", cmd: cmd, auth: "muse-fleet-auth-2026" });
+                logMessage("SHELL", "⚡ Menjalankan perintah bash di SEMUA VPS: " + cmd, "info");
+            } else {
+                ws.send(JSON.stringify({
+                    type: "CMD",
+                    target: chosenTarget,
+                    command: { type: "SHELL", cmd: cmd, auth: "muse-fleet-auth-2026" }
+                }));
+                const ag = (window.agentList || []).find(a => a.agent_id === chosenTarget);
+                const name = ag ? (ag.vps_name || chosenTarget) : chosenTarget;
+                logMessage(name, `💻 [SHELL]: Mengirim perintah -> ${cmd}`, "info");
+            }
         }
 
         function pingSingle(agentId) {
