@@ -1846,7 +1846,9 @@ DASHBOARD_HTML = """<!DOCTYPE html>
 
         function promptShellSingle(agentId, vpsName) {
             const displayName = vpsName || agentId;
-            const cmd = prompt(`💻 Jalankan Perintah Bash di [${displayName}]:\n\nContoh:\n- python3 -c "import playwright; print('PLAYWRIGHT_READY')"\n- ps aux | grep python\n- free -m`, "python3 -c \"import playwright; print('PLAYWRIGHT_READY')\" 2>&1");
+            const defCmd = "uptime; free -m";
+            const promptMsg = "💻 Jalankan Perintah Bash di [" + displayName + "]:\\n\\nContoh:\\n- uptime\\n- ps aux | grep python\\n- python3 -V";
+            const cmd = prompt(promptMsg, defCmd);
             if (!cmd || !cmd.trim()) return;
             const trimmedCmd = cmd.trim();
             if (!ws || ws.readyState !== WebSocket.OPEN) return alert("WebSocket dashboard tidak terhubung!");
