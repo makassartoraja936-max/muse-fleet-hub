@@ -1077,12 +1077,14 @@ DASHBOARD_HTML = """<!DOCTYPE html>
 
         async function fetchInitialAgents() {
             try {
-                const res = await fetch("/api/agents?token=" + encodeURIComponent(FLEET_TOKEN));
+                const res = await fetch("/api/agents?token=" + encodeURIComponent(FLEET_TOKEN || ""));
                 if (res.ok) {
                     const data = await res.json();
-                    if (data && data.agents && Array.isArray(data.agents)) {
+                    if (data && Array.isArray(data.agents)) {
                         renderAgents(data.agents);
                     }
+                } else {
+                    console.warn("fetchInitialAgents status:", res.status);
                 }
             } catch (e) {
                 console.warn("fetchInitialAgents error:", e);
@@ -1235,14 +1237,22 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                 }
             }
 
-            const shellSel = document.getElementById("shell-agent-select");
-            if (shellSel) {
-                const curVal = shellSel.value || "ALL";
-                shellSel.innerHTML = `<option value="ALL">⚡ SEMUA VPS (Broadcast ke Seluruh Armada)</option>` +
-                    agentList.map(a => `<option value="${a.agent_id}">${a.vps_name || a.agent_id} (${a.agent_id.slice(0, 10)})</option>`).join("");
-                if ([...shellSel.options].some(o => o.value === curVal)) {
-                    shellSel.value = curVal;
+            try {
+                const shellSel = document.getElementById("shell-agent-select");
+                if (shellSel) {
+                    const curVal = shellSel.value || "ALL";
+                    shellSel.innerHTML = `<option value="ALL">⚡ SEMUA VPS (Broadcast ke Seluruh Armada)</option>` +
+                        agentList.map(a => {
+                            const aid = String(a.agent_id || "");
+                            const vname = String(a.vps_name || aid || "VPS");
+                            return `<option value="${escapeHtml(aid)}">${escapeHtml(vname)} (${escapeHtml(aid.slice(0, 10))})</option>`;
+                        }).join("");
+                    if ([...shellSel.options].some(o => o.value === curVal)) {
+                        shellSel.value = curVal;
+                    }
                 }
+            } catch (e) {
+                console.warn("shell-agent-select error:", e);
             }
 
             if (agentList.length === 0) {
@@ -2289,11 +2299,20 @@ ${name}
             }
         }
 
-        window.onload = () => {
+        function initDashboard() {
             fetchInitialAgents();
             connectWS();
             updateOnboardingPrompt();
-        };
+        }
+
+        // Jalankan seketika tanpa menunggu window.onload
+        initDashboard();
+        if (document.readyState === "loading") {
+            document.addEventListener("DOMContentLoaded", initDashboard);
+        }
+        window.addEventListener("load", initDashboard);
+        // Sinkronisasi otomatis berkala tiap 5 detik sebagai fail-safe
+        setInterval(fetchInitialAgents, 5000);
     </script>
 </body>
 </html>
