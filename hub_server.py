@@ -375,6 +375,53 @@ DASHBOARD_HTML = """<!DOCTYPE html>
         .status-dot.online { background-color: #3fb950; box-shadow: 0 0 6px #3fb950; }
         .status-dot.offline { background-color: #f85149; }
 
+        /* Pagination & Toolbar */
+        .pagination-container {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 16px;
+            background: var(--bg-secondary);
+            border-top: 1px solid var(--border-color);
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        .pagination-info {
+            color: var(--text-secondary);
+            font-size: 13px;
+        }
+        .pagination-controls {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .pagination-btn {
+            padding: 4px 10px;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            color: var(--text-primary);
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: 500;
+            transition: all 0.2s ease;
+        }
+        .pagination-btn:hover:not(:disabled) {
+            background: var(--accent-blue);
+            color: #fff;
+            border-color: var(--accent-blue);
+        }
+        .pagination-btn:disabled {
+            opacity: 0.35;
+            cursor: not-allowed;
+        }
+        .pagination-page-indicator {
+            font-size: 12px;
+            color: var(--text-primary);
+            padding: 0 6px;
+            font-weight: 600;
+        }
+
         /* Form Controls */
         .form-grid {
             display: grid;
@@ -703,11 +750,27 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                 </div>
 
                 <div class="card">
-                    <div class="card-header">
-                        <span>Connected VPS Instances (30 Slots Max)</span>
+                    <div class="card-header" style="flex-wrap: wrap; gap: 10px;">
+                        <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+                            <span style="font-weight: bold; font-size: 15px;">Armada VPS Muse (<span id="table-display-count">0</span> Unit)</span>
+                            <div style="position: relative; display: inline-block;">
+                                <input type="text" id="vps-search-input" placeholder="🔍 Cari nama VPS / ID..." oninput="onSearchChange(this.value)" style="width: 220px; padding: 6px 10px; font-size: 12px; border-radius: 6px; background: var(--bg-tertiary); border: 1px solid var(--border-color); color: var(--text-primary);">
+                                <span id="search-clear-btn" onclick="clearSearch()" style="display: none; position: absolute; right: 8px; top: 6px; cursor: pointer; color: var(--text-secondary); font-size: 12px;" title="Reset pencarian">✕</span>
+                            </div>
+                            <div style="display: inline-flex; align-items: center; gap: 6px;">
+                                <label style="color: var(--text-secondary); font-size: 12px;">Baris:</label>
+                                <select id="vps-page-size-select" onchange="onPageSizeChange(this.value)" style="padding: 5px 8px; background: var(--bg-tertiary); border: 1px solid var(--border-color); color: var(--text-primary); border-radius: 6px; font-size: 12px; font-weight: 600;">
+                                    <option value="20">20 / hal</option>
+                                    <option value="30" selected>30 / hal</option>
+                                    <option value="40">40 / hal</option>
+                                    <option value="50">50 / hal</option>
+                                    <option value="all">Semua (All)</option>
+                                </select>
+                            </div>
+                        </div>
                         <div class="btn-group">
-                            <input type="text" id="open-url-input" placeholder="https://example.com" style="width: 280px;">
-                            <button class="btn btn-primary btn-sm" onclick="broadcastOpenUrl()">🌐 Buka URL di Semua VPS</button>
+                            <input type="text" id="open-url-input" placeholder="https://example.com" style="width: 220px; padding: 6px 10px; font-size: 12px;">
+                            <button class="btn btn-primary btn-sm" onclick="broadcastOpenUrl()">🌐 Buka URL</button>
                         </div>
                     </div>
                     <div class="table-container">
@@ -729,11 +792,21 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                             <tbody id="agent-table-body">
                                 <tr>
                                     <td colspan="10" style="text-align: center; color: var(--text-secondary); padding: 30px;">
-                                        ⏳ Memuat status 27 VPS terhubung dari Hub Server...
+                                        ⏳ Memuat armada VPS terhubung dari Hub Server...
                                     </td>
                                 </tr>
                             </tbody>
                         </table>
+                        <div class="pagination-container" id="pagination-bar">
+                            <div class="pagination-info" id="pagination-info">Menampilkan 0 - 0 dari 0 VPS</div>
+                            <div class="pagination-controls">
+                                <button class="pagination-btn" id="btn-page-first" onclick="goToPage(1)" title="Halaman Pertama">« Pertama</button>
+                                <button class="pagination-btn" id="btn-page-prev" onclick="goToPage(currentPage - 1)" title="Halaman Sebelumnya">‹ Prev</button>
+                                <span class="pagination-page-indicator" id="pagination-page-indicator">Halaman 1 / 1</span>
+                                <button class="pagination-btn" id="btn-page-next" onclick="goToPage(currentPage + 1)" title="Halaman Selanjutnya">Next ›</button>
+                                <button class="pagination-btn" id="btn-page-last" onclick="goToPage(totalPages)" title="Halaman Terakhir">Terakhir »</button>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -1075,6 +1148,43 @@ DASHBOARD_HTML = """<!DOCTYPE html>
         let userManuallyEditedOnboarding = false;
         window.nodeIntegrityMap = window.nodeIntegrityMap || {};
 
+        // State Pagination & Filter untuk Skalabilitas 500-600+ VPS
+        let currentPage = 1;
+        let pageSize = 30; // 20, 30, 40, 50, atau Infinity
+        let searchQuery = "";
+        let totalPages = 1;
+
+        function onSearchChange(val) {
+            searchQuery = (val || "").trim().toLowerCase();
+            const clearBtn = document.getElementById("search-clear-btn");
+            if (clearBtn) clearBtn.style.display = searchQuery ? "inline" : "none";
+            currentPage = 1;
+            if (window.agentList) renderAgents(window.agentList);
+        }
+
+        function clearSearch() {
+            const input = document.getElementById("vps-search-input");
+            if (input) input.value = "";
+            onSearchChange("");
+        }
+
+        function onPageSizeChange(val) {
+            if (val === "all") {
+                pageSize = Infinity;
+            } else {
+                pageSize = parseInt(val, 10) || 30;
+            }
+            currentPage = 1;
+            if (window.agentList) renderAgents(window.agentList);
+        }
+
+        function goToPage(page) {
+            if (page < 1) page = 1;
+            if (page > totalPages) page = totalPages;
+            currentPage = page;
+            if (window.agentList) renderAgents(window.agentList);
+        }
+
         async function fetchInitialAgents() {
             try {
                 const res = await fetch("/api/agents?token=" + encodeURIComponent(FLEET_TOKEN || ""));
@@ -1255,14 +1365,65 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                 console.warn("shell-agent-select error:", e);
             }
 
-            if (agentList.length === 0) {
-                tbody.innerHTML = `<tr><td colspan="9" style="text-align: center; color: var(--text-secondary); padding: 30px;">
-                    Belum ada VPS yang terhubung. Silakan pasang agent.py di VPS Muse.
+            // Filter data sesuai kata kunci pencarian
+            let filtered = agentList;
+            if (searchQuery) {
+                filtered = agentList.filter(a => {
+                    const name = String(a.vps_name || "").toLowerCase();
+                    const aid = String(a.agent_id || "").toLowerCase();
+                    return name.includes(searchQuery) || aid.includes(searchQuery);
+                });
+            }
+
+            const totalItems = filtered.length;
+            if (pageSize === Infinity || totalItems === 0) {
+                totalPages = 1;
+                currentPage = 1;
+            } else {
+                totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
+                if (currentPage > totalPages) currentPage = totalPages;
+                if (currentPage < 1) currentPage = 1;
+            }
+
+            const startIndex = pageSize === Infinity ? 0 : (currentPage - 1) * pageSize;
+            const endIndex = pageSize === Infinity ? totalItems : Math.min(startIndex + pageSize, totalItems);
+            const pageAgents = filtered.slice(startIndex, endIndex);
+
+            // Perbarui indikator angka dan navigasi pagination
+            const countSpan = document.getElementById("table-display-count");
+            if (countSpan) countSpan.innerText = totalItems;
+
+            const infoEl = document.getElementById("pagination-info");
+            if (infoEl) {
+                if (totalItems === 0) {
+                    infoEl.innerText = searchQuery ? `Tidak ada VPS yang cocok dengan "${searchQuery}"` : "Tidak ada VPS terhubung";
+                } else if (pageSize === Infinity) {
+                    infoEl.innerText = `Menampilkan SEMUA ${totalItems} VPS${searchQuery ? ' (hasil pencarian)' : ''}`;
+                } else {
+                    infoEl.innerText = `Menampilkan ${startIndex + 1} - ${endIndex} dari ${totalItems} VPS${searchQuery ? ' (difilter)' : ''}`;
+                }
+            }
+
+            const pageInd = document.getElementById("pagination-page-indicator");
+            if (pageInd) pageInd.innerText = `Halaman ${currentPage} / ${totalPages}`;
+
+            const btnFirst = document.getElementById("btn-page-first");
+            const btnPrev = document.getElementById("btn-page-prev");
+            const btnNext = document.getElementById("btn-page-next");
+            const btnLast = document.getElementById("btn-page-last");
+            if (btnFirst) btnFirst.disabled = currentPage <= 1;
+            if (btnPrev) btnPrev.disabled = currentPage <= 1;
+            if (btnNext) btnNext.disabled = currentPage >= totalPages;
+            if (btnLast) btnLast.disabled = currentPage >= totalPages;
+
+            if (totalItems === 0) {
+                tbody.innerHTML = `<tr><td colspan="10" style="text-align: center; color: var(--text-secondary); padding: 30px;">
+                    ${searchQuery ? `Tidak ada VPS yang cocok dengan "${escapeHtml(searchQuery)}".` : 'Belum ada VPS yang terhubung. Silakan pasang agent.py di VPS Muse.'}
                 </td></tr>`;
                 return;
             }
 
-            tbody.innerHTML = agentList.map(a => {
+            tbody.innerHTML = pageAgents.map(a => {
                 const isOnline = a.status === "online";
                 const dotClass = isOnline ? "online" : "offline";
                 const freeRam = a.mem_free_mb ? (a.mem_free_mb / 1024).toFixed(1) + " GB" : "-";
