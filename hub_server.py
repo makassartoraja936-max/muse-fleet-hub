@@ -691,14 +691,13 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                         <span style="font-size: 14px;">⚡ Batch Quick Actions — Kirim Perintah ke SEMUA VPS Online Sekaligus</span>
                     </div>
                     <div style="padding: 12px 16px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center;">
-                        <button class="btn btn-sm" style="background: #238636; border-color: #2ea043; font-weight: 600;" onclick="upgradeAllSftp()" title="Upgrade semua VPS online ke worker.py versi SFTP penuh">⬆️ Upgrade SFTP Semua</button>
-                        <button class="btn btn-sm" style="background: #238636; border-color: #2ea043; font-weight: 600;" onclick="batchInstallAutostartGuard()" title="Pasang 4-Layer Autostart Guard (systemd service + ensure_worker.sh + Cron + @reboot) ke SEMUA VPS">🛡️ Pasang Autostart Guard</button>
                         <button class="btn btn-sm" style="background: #238636; border-color: #2ea043; font-weight: 600;" onclick="batchSelfHealAll()" title="Self-Heal / Normalkan semua file VPS ke standar 100% lengkap">🔄 Self-Heal Semua</button>
                         <button class="btn btn-sm" style="background: #1f6feb; border-color: #388bfd; font-weight: 600;" onclick="batchAuditIntegrity()" title="Audit integritas struktur file (0-100%) di SEMUA VPS">🔍 Audit Integritas</button>
                         <button class="btn btn-sm" style="background: #1f6feb; border-color: #388bfd;" onclick="batchCheckStatus()" title="Cek apakah worker.py berjalan + 5 baris log terakhir">📋 Cek Status Worker</button>
                         <button class="btn btn-sm" style="background: #6e40c9; border-color: #8b5cf6;" onclick="batchHardenLauncher()" title="Terapkan setsid ke run.sh agar worker tahan sesi mati">🔒 Hardening Launcher</button>
                         <button class="btn btn-sm" style="background: #da3633; border-color: #f85149;" onclick="batchRestartWorker()" title="Kill worker.py, run.sh watchdog akan restart otomatis">♻️ Restart Semua Worker</button>
                         <button class="btn btn-sm" style="background: #1f6feb; border-color: #388bfd;" onclick="batchGitPull()" title="Git pull terbaru di semua VPS">🔄 Git Pull Semua</button>
+                        <button class="btn btn-sm btn-danger" style="margin-left: auto; font-weight: 600;" onclick="removeAllOfflineAgents()" title="Hapus semua VPS yang berstatus Offline dari daftar">🗑️ Hapus Semua Offline</button>
                         <span style="color: var(--text-secondary); font-size: 11px; margin-left: 8px;" id="batch-progress"></span>
                     </div>
                 </div>
@@ -1256,13 +1255,37 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                         <button class="btn btn-sm" onclick="pingSingle('${a.agent_id}')">Ping</button>
                         ${isOnline ? `<button class="btn btn-sm" style="background: #238636; border-color: #2ea043; margin-left: 4px;" onclick="selfHealNodeSingle('${a.agent_id}')" title="Self-Heal: Normalkan semua file ke standar 100% lengkap">🔄 Self-Heal</button>` : ''}
                         ${isOnline ? `<button class="btn btn-sm" style="background: #21262d; border-color: #30363d; margin-left: 4px;" onclick="auditNodeIntegrity('${a.agent_id}')" title="Cek kelengkapan file (Audit 0-100%)">🔍</button>` : ''}
-                        ${isOnline ? `<button class="btn btn-sm" style="background: #1f6feb; border-color: #388bfd; margin-left: 4px;" onclick="upgradeWorkerSftp('${a.agent_id}')" title="Upgrade ke Full SFTP (worker.py)">⬆️ SFTP</button>` : ''}
-                        ${isOnline ? `<button class="btn btn-sm" style="background: #238636; border-color: #2ea043; margin-left: 4px;" onclick="installAutostartGuardSingle('${a.agent_id}')" title="Pasang 3-Layer Autostart Guard (Cron 2 Menit & @reboot)">🛡️ Guard</button>` : ''}
                         <button class="btn btn-sm btn-danger" onclick="stopMiningSingle('${a.agent_id}')">Stop</button>
-                        ${!isOnline ? `<button class="btn btn-sm" style="background: #475569; margin-left: 4px;" onclick="removeAgent('${a.agent_id}')" title="Hapus dari daftar">✕</button>` : ''}
+                        <button class="btn btn-sm btn-danger" style="margin-left: 4px; padding: 2px 7px;" onclick="removeAgent('${a.agent_id}', '${escapeHtml(a.vps_name || a.agent_id)}')" title="Hapus node ini dari daftar">🗑️ Hapus</button>
                     </td>
                 </tr>`;
             }).join("");
+        }
+
+        function removeAgent(agentId, vpsName) {
+            const displayName = vpsName || agentId;
+            if (!confirm(`Hapus node [${displayName}] (${agentId}) dari daftar dashboard?`)) return;
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({
+                    type: "REMOVE_AGENT",
+                    agent_id: agentId
+                }));
+                logMessage("HUB", `🗑️ Menghapus node [${displayName}] dari daftar...`, "warning");
+            } else {
+                alert("WebSocket dashboard tidak terhubung.");
+            }
+        }
+
+        function removeAllOfflineAgents() {
+            if (!confirm("Hapus SEMUA node yang sedang OFFLINE dari daftar dashboard?")) return;
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({
+                    type: "REMOVE_ALL_OFFLINE"
+                }));
+                logMessage("HUB", "🗑️ Menghapus seluruh node offline dari daftar dashboard...", "warning");
+            } else {
+                alert("WebSocket dashboard tidak terhubung.");
+            }
         }
 
         function renameAgent(agentId, currentName) {
@@ -2358,6 +2381,12 @@ class AgentRegistry:
 
     def remove_agent(self, agent_id: str):
         if agent_id in self.agents:
+            ws = self.agents[agent_id].get("ws")
+            if ws:
+                try:
+                    asyncio.create_task(ws.close(code=1000, reason="Removed by admin"))
+                except Exception:
+                    pass
             del self.agents[agent_id]
         if agent_id in self.cache:
             del self.cache[agent_id]
@@ -2923,6 +2952,18 @@ async def dashboard_ws_handler(request):
                 elif data.get("type") == "REMOVE_AGENT":
                     aid = data.get("agent_id")
                     registry.remove_agent(aid)
+                    await broadcast_to_dashboards({"type": "AGENT_LIST", "agents": registry.get_public_list()})
+
+                elif data.get("type") == "REMOVE_ALL_OFFLINE":
+                    offline_ids = [aid for aid, a in list(registry.agents.items()) if a.get("status") == "offline"]
+                    for aid in offline_ids:
+                        registry.remove_agent(aid)
+                    for cid in list(registry.cache.keys()):
+                        if cid not in registry.agents or registry.agents[cid].get("status") == "offline":
+                            if cid in registry.cache:
+                                del registry.cache[cid]
+                    registry._save_cache()
+                    logger.info(f"🗑️ Membersihkan {len(offline_ids)} node offline dari dashboard.")
                     await broadcast_to_dashboards({"type": "AGENT_LIST", "agents": registry.get_public_list()})
     finally:
         registry.dashboard_websockets.remove(ws)
