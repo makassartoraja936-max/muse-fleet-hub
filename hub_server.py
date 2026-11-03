@@ -1458,6 +1458,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                     <td><span style="color: ${tasks !== 'Idle' ? '#388bfd' : 'inherit'}">${tasks}</span></td>
                     <td>
                         <button class="btn btn-sm" onclick="pingSingle('${a.agent_id}')">Ping</button>
+                        ${isOnline ? `<button class="btn btn-sm" style="background: #0969da; border-color: #218bff; margin-left: 4px;" onclick="openFsForAgent('${a.agent_id}')" title="Buka Remote SFTP File Explorer untuk VPS ini">📁 SFTP</button>` : ''}
                         ${isOnline ? `<button class="btn btn-sm" style="background: #1f6feb; border-color: #388bfd; margin-left: 4px;" onclick="promptShellSingle('${a.agent_id}', '${escapeHtml(a.vps_name || a.agent_id)}')" title="Jalankan Perintah Bash di VPS ini">💻 Shell</button>` : ''}
                         ${isOnline ? `<button class="btn btn-sm" style="background: #238636; border-color: #2ea043; margin-left: 4px;" onclick="selfHealNodeSingle('${a.agent_id}')" title="Self-Heal: Normalkan semua file ke standar 100% lengkap">🔄 Self-Heal</button>` : ''}
                         ${isOnline ? `<button class="btn btn-sm" style="background: #21262d; border-color: #30363d; margin-left: 4px;" onclick="auditNodeIntegrity('${a.agent_id}')" title="Cek kelengkapan file (Audit 0-100%)">🔍</button>` : ''}
@@ -2089,6 +2090,15 @@ DASHBOARD_HTML = """<!DOCTYPE html>
             }
         }
 
+        function openFsForAgent(agentId) {
+            if (!agentId) return;
+            currentFsAgent = agentId;
+            const fsSel = document.getElementById("fs-agent-select");
+            if (fsSel) fsSel.value = agentId;
+            switchTab("files");
+            navigateToPath("~/workspace");
+        }
+
         function onFsAgentChange() {
             const sel = document.getElementById("fs-agent-select");
             currentFsAgent = sel.value;
@@ -2176,7 +2186,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
         }
 
         function handleFsResult(msg) {
-            if (msg.agent_id !== currentFsAgent && currentFsAgent !== null) return;
+            if (!currentFsAgent || (msg.agent_id && msg.agent_id !== currentFsAgent)) return;
 
             if (msg.type === "FS_LIST_RESULT") {
                 if (fsListTimeout) {
@@ -2185,7 +2195,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                 }
 
                 if (msg.error) {
-                    document.getElementById("fs-table-body").innerHTML = `<tr><td colspan="4" style="color: #f85149; padding: 25px; text-align: center;">Gagal membuka folder: ${escapeHtml(msg.error)}</td></tr>`;
+                    document.getElementById("fs-table-body").innerHTML = `<tr><td colspan="4" style="color: #f85149; padding: 25px; text-align: center;"><div style="font-weight: bold; margin-bottom: 8px;">Gagal membuka folder: ${escapeHtml(msg.error)}</div><button class="btn btn-sm" onclick="navigateToPath(\'~/workspace\')">🏠 Kembali ke ~/workspace</button></td></tr>`;
                     return;
                 }
 
