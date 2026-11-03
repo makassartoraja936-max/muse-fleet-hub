@@ -1320,15 +1320,14 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                 const fsSel = document.getElementById("fs-agent-select");
                 if (fsSel) {
                     const curVal = fsSel.value;
-                    fsSel.innerHTML = `<option value="">Pilih VPS Target...</option>` + agentList.map(a => `<option value="${a.agent_id}">${a.vps_name || a.agent_id} (${a.agent_id})</option>`).join("");
-                    if (curVal && [...fsSel.options].some(o => o.value === curVal)) {
-                        fsSel.value = curVal;
-                    } else if (agentList.length > 0 && !currentFsAgent) {
-                        fsSel.value = agentList[0].agent_id;
-                        currentFsAgent = agentList[0].agent_id;
-                        const tf = document.getElementById("tab-files");
-                        if (tf && tf.classList && tf.classList.contains("active")) {
-                            navigateToPath("~/workspace");
+                    const newHtml = `<option value="">Pilih VPS Target...</option>` + agentList.map(a => `<option value="${a.agent_id}">${a.vps_name || a.agent_id} (${a.agent_id})</option>`).join("");
+                    if (fsSel.innerHTML !== newHtml) {
+                        fsSel.innerHTML = newHtml;
+                        if (curVal && [...fsSel.options].some(o => o.value === curVal)) {
+                            fsSel.value = curVal;
+                        } else if (agentList.length > 0 && !currentFsAgent) {
+                            fsSel.value = agentList[0].agent_id;
+                            currentFsAgent = agentList[0].agent_id;
                         }
                     }
                 }
@@ -3041,7 +3040,7 @@ async def handle_agent_connection(websocket):
 
                 if mtype == "HEARTBEAT":
                     registry.update_heartbeat(agent_id, msg)
-                    await broadcast_to_dashboards({"type": "AGENT_LIST", "agents": registry.get_public_list()})
+                    # Smoothed: memory updated instantly, dashboard synced periodically via maintenance_loop
 
                 elif mtype == "PONG":
                     sent_ts = msg.get("sent_ts", 0)
@@ -3162,7 +3161,7 @@ async def dashboard_ws_handler(request):
     if not verify_session_token(cookie):
         return web.HTTPUnauthorized(text="Unauthorized WebSocket access. Please login first.")
 
-    ws = web.WebSocketResponse()
+    ws = web.WebSocketResponse(heartbeat=20.0, max_msg_size=50 * 1024 * 1024)
     await ws.prepare(request)
 
     registry.dashboard_websockets.add(ws)
@@ -3273,32 +3272,60 @@ async def dispatch_command(target: str, command: dict):
     else:
         # Single Agent Target
         agent = registry.agents.get(target)
-        if agent and agent["status"] == "online" and agent["ws"]:
-            try:
-                cmd_copy = dict(command)
-                token_to_use = agent.get("auth_token") or command.get("auth") or "muse-fleet-auth-2026"
-                cmd_copy["auth"] = token_to_use
-                await agent["ws"].send(json.dumps(cmd_copy))
-                token_status = "TOKEN_OK" if agent.get("auth_token") else "FALLBACK_DEFAULT"
-                logger.info(f"Kirim perintah {command.get('type')} ke {target} [{token_status}]")
-            except Exception as e:
-                logger.error(f"Gagal kirim ke {target}: {e}")
+        if not agent or agent.get("status") != "online" or not agent.get("ws"):
+            logger.warning(f"Target {target} tidak online atau koneksi WebSocket belum tersedia.")
+            await broadcast_to_dashboards({
+                "type": "LOG",
+                "agent_id": "HUB",
+                "msg": f"⚠️ Target [{target}] sedang offline atau belum terhubung ke Hub.",
+                "level": "error"
+            })
+            if command.get("type") == "FS_LIST":
+                await broadcast_to_dashboards({
+                    "type": "FS_LIST_RESULT",
+                    "agent_id": target,
+                    "path": command.get("path", "~/workspace"),
+                    "entries": [],
+                    "error": f"VPS [{target}] sedang offline. Tunggu hingga VPS online kembali."
+                })
+            return
+
+        try:
+            cmd_copy = dict(command)
+            token_to_use = agent.get("auth_token") or command.get("auth") or "muse-fleet-auth-2026"
+            cmd_copy["auth"] = token_to_use
+            await agent["ws"].send(json.dumps(cmd_copy))
+            token_status = "TOKEN_OK" if agent.get("auth_token") else "FALLBACK_DEFAULT"
+            logger.info(f"Kirim perintah {command.get('type')} ke {target} [{token_status}]")
+        except Exception as e:
+            logger.error(f"Gagal kirim ke {target}: {e}")
+            if command.get("type") == "FS_LIST":
+                await broadcast_to_dashboards({
+                    "type": "FS_LIST_RESULT",
+                    "agent_id": target,
+                    "path": command.get("path", "~/workspace"),
+                    "entries": [],
+                    "error": f"Gagal mengirim perintah ke VPS: {e}"
+                })
 
 # ==========================================
 # Background Tasks (Heartbeat & Timeout Check)
 # ==========================================
 async def maintenance_loop():
+    last_sync = 0
     while True:
-        await asyncio.sleep(15)
+        await asyncio.sleep(4)
         now = time.time()
         changed = False
         for agent_id, a in list(registry.agents.items()):
-            # Toleransi rotasi IP 4 menit: jika agent tidak lapor heartbeat > 300 detik (5 menit), tandai offline
-            if a["status"] == "online" and (now - a["last_seen"]) > 300:
+            # Toleransi rotasi IP: jika agent tidak lapor heartbeat > 75 detik, tandai offline
+            if a["status"] == "online" and (now - a["last_seen"]) > 75:
                 registry.set_offline(agent_id)
                 changed = True
-        if changed:
+        # Smooth dashboard sync every 5 seconds or immediately when an agent status changes
+        if changed or (now - last_sync) >= 5:
             await broadcast_to_dashboards({"type": "AGENT_LIST", "agents": registry.get_public_list()})
+            last_sync = now
 
 # ==========================================
 # Main Server Runner
