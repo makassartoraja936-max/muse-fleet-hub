@@ -2129,7 +2129,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                         <div style="font-size: 11px; color: var(--text-secondary);">Perintah upgrade otomatis dikirim via Shell Runner tanpa perlu buka terminal atau chat AI Muse.</div>
                     </td></tr>`;
                 }
-            }, 5000);
+            }, 12000);
 
             if (ws && ws.readyState === WebSocket.OPEN) {
                 ws.send(JSON.stringify({
@@ -3112,9 +3112,10 @@ async def handle_agent_connection(websocket):
                     await broadcast_to_dashboards({
                         "type": "LOG",
                         "agent_id": agent_id,
-                        "msg": f"Shell Output:\\n{output}",
+                        "msg": f"Shell Output (exit {exit_code}):\\n{output}",
                         "level": log_lvl
                     })
+                    await broadcast_to_dashboards(msg)
 
             except json.JSONDecodeError:
                 logger.warning(f"Pesan non-JSON dari agent {agent_id}")
