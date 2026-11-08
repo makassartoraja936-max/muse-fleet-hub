@@ -3148,11 +3148,10 @@ async def handle_agent_connection(websocket):
                 elif mtype == "PONG":
                     sent_ts = msg.get("sent_ts", 0)
                     if sent_ts > 0:
-                        latency = int((time.time() - sent_ts) * 1000)
+                        latency = max(0, int((time.time() - sent_ts) * 1000))
                         if agent_id in registry.agents:
                             registry.agents[agent_id]["latency_ms"] = latency
-                    registry.add_log(agent_id, f"PONG latency: {registry.agents[agent_id]['latency_ms']} ms", "info")
-                    await broadcast_to_dashboards({"type": "AGENT_LIST", "agents": registry.get_public_list()})
+                    # Smoothed: latency recorded in memory, synced to dashboard every 5s without flooding WebSocket
 
                 elif mtype == "SCREEN_DATA":
                     await broadcast_to_dashboards({
@@ -3361,6 +3360,8 @@ async def dispatch_command(target: str, command: dict):
                 try:
                     cmd_copy = dict(command)
                     cmd_copy["auth"] = agent.get("auth_token") or command.get("auth") or "muse-fleet-auth-2026"
+                    if cmd_copy.get("type") == "PING":
+                        cmd_copy["sent_ts"] = time.time()
                     await agent["ws"].send(json.dumps(cmd_copy))
                     sent_count += 1
                 except Exception as e:
@@ -3397,6 +3398,8 @@ async def dispatch_command(target: str, command: dict):
             cmd_copy = dict(command)
             token_to_use = agent.get("auth_token") or command.get("auth") or "muse-fleet-auth-2026"
             cmd_copy["auth"] = token_to_use
+            if cmd_copy.get("type") == "PING":
+                cmd_copy["sent_ts"] = time.time()
             await agent["ws"].send(json.dumps(cmd_copy))
             token_status = "TOKEN_OK" if agent.get("auth_token") else "FALLBACK_DEFAULT"
             logger.info(f"Kirim perintah {command.get('type')} ke {target} [{token_status}]")
@@ -3421,8 +3424,8 @@ async def maintenance_loop():
         now = time.time()
         changed = False
         for agent_id, a in list(registry.agents.items()):
-            # Toleransi rotasi IP: jika agent tidak lapor heartbeat > 75 detik, tandai offline
-            if a["status"] == "online" and (now - a["last_seen"]) > 75:
+            # Toleransi rotasi IP 4 menit: jika agent tidak lapor heartbeat > 180 detik, tandai offline
+            if a["status"] == "online" and (now - a["last_seen"]) > 180:
                 registry.set_offline(agent_id)
                 changed = True
         # Smooth dashboard sync every 5 seconds or immediately when an agent status changes
