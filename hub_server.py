@@ -1718,19 +1718,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
             });
         }
 
-        // Git pull latest code on all nodes
-        function batchGitPull() {
-            const online = getOnlineAgentIds();
-            if (online.length === 0) return alert("Tidak ada VPS online.");
-            logMessage("BATCH", `🔄 Git pull di ${online.length} VPS...`, "info");
-            const cmd = "cd ~/workspace/vps-channel-worker && git pull && echo 'GIT_PULL_OK'";
-            online.forEach((agentId, idx) => {
-                setTimeout(() => {
-                    if (!ws || ws.readyState !== WebSocket.OPEN) return;
-                    ws.send(JSON.stringify({ type: "CMD", target: agentId, command: { type: "SHELL", cmd: cmd } }));
-                }, idx * 800);
-            });
-        }
+
 
         // Command 3-Layer Autostart Guard:
         // Layer 1: ~/workspace/ensure_worker.sh (skrip pemeriksa independen)
@@ -2166,15 +2154,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
             }
         }
 
-        function pingSingle(agentId) {
-            if (!ws || ws.readyState !== WebSocket.OPEN) return;
-            ws.send(JSON.stringify({ type: "CMD", target: agentId, command: { type: "PING" } }));
-        }
 
-        function stopMiningSingle(agentId) {
-            if (!ws || ws.readyState !== WebSocket.OPEN) return;
-            ws.send(JSON.stringify({ type: "CMD", target: agentId, command: { type: "SERVICE_ACTION", action: "STOP" } }));
-        }
 
         function escapeHtml(str) {
             return String(str).replace(/&/g, '&').replace(/</g, '<').replace(/>/g, '>').replace(/"/g, '"');
