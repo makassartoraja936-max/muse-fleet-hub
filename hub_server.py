@@ -743,7 +743,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                         <button class="btn btn-sm" style="background: #1f6feb; border-color: #388bfd;" onclick="batchCheckStatus()" title="Cek apakah worker.py berjalan + 5 baris log terakhir">📋 Cek Status Worker</button>
                         <button class="btn btn-sm" style="background: #6e40c9; border-color: #8b5cf6;" onclick="batchHardenLauncher()" title="Terapkan setsid ke run.sh agar worker tahan sesi mati">🔒 Hardening Launcher</button>
                         <button class="btn btn-sm" style="background: #da3633; border-color: #f85149;" onclick="batchRestartWorker()" title="Kill worker.py, run.sh watchdog akan restart otomatis">♻️ Restart Semua Worker</button>
-                        <button class="btn btn-sm" style="background: #1f6feb; border-color: #388bfd;" onclick="batchGitPull()" title="Git pull terbaru di semua VPS">🔄 Git Pull Semua</button>
+                        
                         <button class="btn btn-sm btn-danger" style="margin-left: auto; font-weight: 600;" onclick="removeAllOfflineAgents()" title="Hapus semua VPS yang berstatus Offline dari daftar">🗑️ Hapus Semua Offline</button>
                         <span style="color: var(--text-secondary); font-size: 11px; margin-left: 8px;" id="batch-progress"></span>
                     </div>
@@ -767,6 +767,22 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                                     <option value="all">Semua (All)</option>
                                 </select>
                             </div>
+                            <div style="display: inline-flex; align-items: center; gap: 6px;">
+                                <label style="color: var(--text-secondary); font-size: 12px;">Urutan:</label>
+                                <select id="vps-sort-select" onchange="onSortChange(this.value)" style="padding: 5px 8px; background: var(--bg-tertiary); border: 1px solid var(--border-color); color: var(--text-primary); border-radius: 6px; font-size: 12px; font-weight: 600;">
+                                    <option value="default">Default (Urutan Masuk)</option>
+                                    <option value="uptime_desc">⏳ Uptime: Terlama ➔ Terbaru</option>
+                                    <option value="uptime_asc">⏳ Uptime: Terbaru ➔ Terlama</option>
+                                    <option value="cpu_desc">⚡ CPU: Tertinggi (Sibuk)</option>
+                                    <option value="cpu_asc">⚡ CPU: Terendah (Santai)</option>
+                                    <option value="ram_desc">💾 RAM: Free Terbanyak</option>
+                                    <option value="ram_asc">💾 RAM: Free Tersedikit</option>
+                                    <option value="status_online">🟢 Status: Online Dahulu</option>
+                                    <option value="status_offline">🔴 Status: Offline Dahulu</option>
+                                    <option value="name_asc">🔤 Nama VPS: A - Z</option>
+                                    <option value="name_desc">🔤 Nama VPS: Z - A</option>
+                                </select>
+                            </div>
                         </div>
                         <div class="btn-group">
                             <input type="text" id="open-url-input" placeholder="https://example.com" style="width: 220px; padding: 6px 10px; font-size: 12px;">
@@ -777,16 +793,16 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                         <table>
                             <thead>
                                 <tr>
-                                    <th>Status</th>
-                                    <th>Nama VPS</th>
+                                    <th onclick="toggleSort('status')" style="cursor: pointer; user-select: none;" title="Klik untuk urutkan status">Status <span id="sort-icon-status"></span></th>
+                                    <th onclick="toggleSort('name')" style="cursor: pointer; user-select: none;" title="Klik untuk urutkan nama VPS">Nama VPS <span id="sort-icon-name"></span></th>
                                     <th>Agent ID</th>
                                     <th>Integritas File</th>
-                                    <th>Latency</th>
-                                    <th>Free RAM</th>
-                                    <th>CPU Load</th>
-                                    <th>Uptime</th>
+                                    <th onclick="toggleSort('latency')" style="cursor: pointer; user-select: none;" title="Klik untuk urutkan latency">Latency <span id="sort-icon-latency"></span></th>
+                                    <th onclick="toggleSort('ram')" style="cursor: pointer; user-select: none;" title="Klik untuk urutkan free RAM">Free RAM <span id="sort-icon-ram"></span></th>
+                                    <th onclick="toggleSort('cpu')" style="cursor: pointer; user-select: none;" title="Klik untuk urutkan CPU load">CPU Load <span id="sort-icon-cpu"></span></th>
+                                    <th onclick="toggleSort('uptime')" style="cursor: pointer; user-select: none;" title="Klik untuk urutkan uptime">Uptime <span id="sort-icon-uptime"></span></th>
                                     <th>Tugas Aktif</th>
-                                    <th>Aksi</th>
+                                    <th style="text-align: center;">Aksi</th>
                                 </tr>
                             </thead>
                             <tbody id="agent-table-body">
@@ -1150,6 +1166,109 @@ DASHBOARD_HTML = """<!DOCTYPE html>
 
         // State Pagination & Filter untuk Skalabilitas 500-600+ VPS
         let currentPage = 1;
+        let currentSort = "default";
+
+        function onSortChange(val) {
+            currentSort = val || "default";
+            currentPage = 1;
+            updateSortHeaderIcons();
+            if (window.agentList) renderAgents(window.agentList);
+        }
+
+        function toggleSort(col) {
+            let nextSort = "default";
+            if (col === "uptime") {
+                nextSort = currentSort === "uptime_desc" ? "uptime_asc" : "uptime_desc";
+            } else if (col === "cpu") {
+                nextSort = currentSort === "cpu_desc" ? "cpu_asc" : "cpu_desc";
+            } else if (col === "ram") {
+                nextSort = currentSort === "ram_desc" ? "ram_asc" : "ram_desc";
+            } else if (col === "status") {
+                nextSort = currentSort === "status_online" ? "status_offline" : "status_online";
+            } else if (col === "name") {
+                nextSort = currentSort === "name_asc" ? "name_desc" : "name_asc";
+            } else if (col === "latency") {
+                nextSort = currentSort === "latency_asc" ? "latency_desc" : "latency_asc";
+            }
+            const sel = document.getElementById("vps-sort-select");
+            if (sel) sel.value = nextSort;
+            onSortChange(nextSort);
+        }
+
+        function updateSortHeaderIcons() {
+            const icons = {
+                status: "", name: "", latency: "", ram: "", cpu: "", uptime: ""
+            };
+            if (currentSort === "uptime_desc") icons.uptime = " 🔽";
+            else if (currentSort === "uptime_asc") icons.uptime = " 🔼";
+            else if (currentSort === "cpu_desc") icons.cpu = " 🔽";
+            else if (currentSort === "cpu_asc") icons.cpu = " 🔼";
+            else if (currentSort === "ram_desc") icons.ram = " 🔽";
+            else if (currentSort === "ram_asc") icons.ram = " 🔼";
+            else if (currentSort === "status_online") icons.status = " 🟢";
+            else if (currentSort === "status_offline") icons.status = " 🔴";
+            else if (currentSort === "name_asc") icons.name = " 🔼";
+            else if (currentSort === "name_desc") icons.name = " 🔽";
+
+            for (const [col, icon] of Object.entries(icons)) {
+                const el = document.getElementById("sort-icon-" + col);
+                if (el) el.innerText = icon;
+            }
+        }
+
+        function parseUptimeSeconds(str) {
+            if (!str || str === "-") return -1;
+            if (typeof str === "number") return str;
+            let s = String(str).trim();
+            if (/^[0-9]+$/.test(s)) return parseInt(s, 10);
+            let totalSec = 0;
+            let dMatch = s.match(/([0-9]+)[ \t]*d/);
+            let hMatch = s.match(/([0-9]+)[ \t]*h/);
+            let mMatch = s.match(/([0-9]+)[ \t]*m/);
+            let sMatch = s.match(/([0-9]+)[ \t]*s/);
+            if (dMatch) totalSec += parseInt(dMatch[1], 10) * 86400;
+            if (hMatch) totalSec += parseInt(hMatch[1], 10) * 3600;
+            if (mMatch) totalSec += parseInt(mMatch[1], 10) * 60;
+            if (sMatch) totalSec += parseInt(sMatch[1], 10);
+            return totalSec > 0 ? totalSec : -1;
+        }
+
+        function sortAgents(list, sortType) {
+            if (!sortType || sortType === "default") return list;
+            const sorted = [...list];
+            if (sortType === "uptime_desc") {
+                sorted.sort((a, b) => parseUptimeSeconds(b.uptime) - parseUptimeSeconds(a.uptime));
+            } else if (sortType === "uptime_asc") {
+                sorted.sort((a, b) => {
+                    const ua = parseUptimeSeconds(a.uptime);
+                    const ub = parseUptimeSeconds(b.uptime);
+                    if (ua < 0) return 1;
+                    if (ub < 0) return -1;
+                    return ua - ub;
+                });
+            } else if (sortType === "cpu_desc") {
+                sorted.sort((a, b) => (Number(b.cpu_pct) || 0) - (Number(a.cpu_pct) || 0));
+            } else if (sortType === "cpu_asc") {
+                sorted.sort((a, b) => (Number(a.cpu_pct) || 0) - (Number(b.cpu_pct) || 0));
+            } else if (sortType === "ram_desc") {
+                sorted.sort((a, b) => (Number(b.mem_free_mb) || 0) - (Number(a.mem_free_mb) || 0));
+            } else if (sortType === "ram_asc") {
+                sorted.sort((a, b) => (Number(a.mem_free_mb) || 0) - (Number(b.mem_free_mb) || 0));
+            } else if (sortType === "status_online") {
+                sorted.sort((a, b) => (b.status === "online" ? 1 : 0) - (a.status === "online" ? 1 : 0));
+            } else if (sortType === "status_offline") {
+                sorted.sort((a, b) => (b.status === "offline" ? 1 : 0) - (a.status === "offline" ? 1 : 0));
+            } else if (sortType === "name_asc") {
+                sorted.sort((a, b) => String(a.vps_name || "").localeCompare(String(b.vps_name || ""), undefined, { numeric: true, sensitivity: 'base' }));
+            } else if (sortType === "name_desc") {
+                sorted.sort((a, b) => String(b.vps_name || "").localeCompare(String(a.vps_name || ""), undefined, { numeric: true, sensitivity: 'base' }));
+            } else if (sortType === "latency_asc") {
+                sorted.sort((a, b) => (Number(a.latency_ms) || 99999) - (Number(b.latency_ms) || 99999));
+            } else if (sortType === "latency_desc") {
+                sorted.sort((a, b) => (Number(b.latency_ms) || 0) - (Number(a.latency_ms) || 0));
+            }
+            return sorted;
+        }
         let pageSize = 30; // 20, 30, 40, 50, atau Infinity
         let searchQuery = "";
         let totalPages = 1;
@@ -1374,6 +1493,9 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                 });
             }
 
+            // Urutkan data berdasarkan pilihan sort (Uptime, CPU, RAM, Status, dll)
+            filtered = sortAgents(filtered, currentSort);
+
             const totalItems = filtered.length;
             if (pageSize === Infinity || totalItems === 0) {
                 totalPages = 1;
@@ -1455,14 +1577,13 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                     <td>${cpuPct}</td>
                     <td>${escapeHtml(a.uptime || "-")}</td>
                     <td><span style="color: ${tasks !== 'Idle' ? '#388bfd' : 'inherit'}">${tasks}</span></td>
-                    <td>
-                        <button class="btn btn-sm" onclick="pingSingle('${a.agent_id}')">Ping</button>
-                        ${isOnline ? `<button class="btn btn-sm" style="background: #0969da; border-color: #218bff; margin-left: 4px;" onclick="openFsForAgent('${a.agent_id}')" title="Buka Remote SFTP File Explorer untuk VPS ini">📁 SFTP</button>` : ''}
-                        ${isOnline ? `<button class="btn btn-sm" style="background: #1f6feb; border-color: #388bfd; margin-left: 4px;" onclick="promptShellSingle('${a.agent_id}', '${escapeHtml(a.vps_name || a.agent_id)}')" title="Jalankan Perintah Bash di VPS ini">💻 Shell</button>` : ''}
-                        ${isOnline ? `<button class="btn btn-sm" style="background: #238636; border-color: #2ea043; margin-left: 4px;" onclick="selfHealNodeSingle('${a.agent_id}')" title="Self-Heal: Normalkan semua file ke standar 100% lengkap">🔄 Self-Heal</button>` : ''}
-                        ${isOnline ? `<button class="btn btn-sm" style="background: #21262d; border-color: #30363d; margin-left: 4px;" onclick="auditNodeIntegrity('${a.agent_id}')" title="Cek kelengkapan file (Audit 0-100%)">🔍</button>` : ''}
-                        <button class="btn btn-sm btn-danger" onclick="stopMiningSingle('${a.agent_id}')">Stop</button>
-                        <button class="btn btn-sm btn-danger" style="margin-left: 4px; padding: 2px 7px;" onclick="removeAgent('${a.agent_id}', '${escapeHtml(a.vps_name || a.agent_id)}')" title="Hapus node ini dari daftar">🗑️ Hapus</button>
+                    <td style="text-align: center; white-space: nowrap;">
+                        ${isOnline ? `
+                            <button class="btn btn-sm" style="background: #0969da; border-color: #218bff; font-weight: 600; padding: 4px 10px;" onclick="openFsForAgent('${a.agent_id}')" title="Buka Remote SFTP File Explorer untuk VPS ini">📁 SFTP</button>
+                            <button class="btn btn-sm" style="background: #1f6feb; border-color: #388bfd; margin-left: 6px; font-weight: 600; padding: 4px 10px;" onclick="promptShellSingle('${a.agent_id}', '${escapeHtml(a.vps_name || a.agent_id)}')" title="Jalankan Perintah Bash di VPS ini">💻 Shell</button>
+                        ` : `
+                            <button class="btn btn-sm btn-danger" style="padding: 4px 10px; font-weight: 600;" onclick="removeAgent('${a.agent_id}', '${escapeHtml(a.vps_name || a.agent_id)}')" title="Hapus node offline ini dari daftar">🗑️ Hapus</button>
+                        `}
                     </td>
                 </tr>`;
             }).join("");
