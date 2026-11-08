@@ -740,10 +740,8 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                     <div style="padding: 12px 16px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center;">
                         <button class="btn btn-sm" style="background: #238636; border-color: #2ea043; font-weight: 600;" onclick="batchSelfHealAll()" title="Self-Heal / Normalkan semua file VPS ke standar 100% lengkap">🔄 Self-Heal Semua</button>
                         <button class="btn btn-sm" style="background: #1f6feb; border-color: #388bfd; font-weight: 600;" onclick="batchAuditIntegrity()" title="Audit integritas struktur file (0-100%) di SEMUA VPS">🔍 Audit Integritas</button>
-                        <button class="btn btn-sm" style="background: #1f6feb; border-color: #388bfd;" onclick="batchCheckStatus()" title="Cek apakah worker.py berjalan + 5 baris log terakhir">📋 Cek Status Worker</button>
-                        <button class="btn btn-sm" style="background: #6e40c9; border-color: #8b5cf6;" onclick="batchHardenLauncher()" title="Terapkan setsid ke run.sh agar worker tahan sesi mati">🔒 Hardening Launcher</button>
-                        <button class="btn btn-sm" style="background: #da3633; border-color: #f85149;" onclick="batchRestartWorker()" title="Kill worker.py, run.sh watchdog akan restart otomatis">♻️ Restart Semua Worker</button>
-                        
+                        <button class="btn btn-sm" style="background: #da3633; border-color: #f85149; font-weight: 600;" onclick="batchRestartWorker()" title="Kill worker.py, run.sh watchdog akan restart otomatis">♻️ Restart Semua Worker</button>
+                        <button class="btn btn-sm" style="background: #21262d; border-color: #30363d; color: #58a6ff; font-weight: 600;" onclick="exportFleetCsv()" title="Unduh data seluruh 490+ armada dalam format CSV / Excel">📥 Ekspor CSV Armada</button>
                         <button class="btn btn-sm btn-danger" style="margin-left: auto; font-weight: 600;" onclick="removeAllOfflineAgents()" title="Hapus semua VPS yang berstatus Offline dari daftar">🗑️ Hapus Semua Offline</button>
                         <span style="color: var(--text-secondary); font-size: 11px; margin-left: 8px;" id="batch-progress"></span>
                     </div>
@@ -1675,33 +1673,37 @@ DASHBOARD_HTML = """<!DOCTYPE html>
             });
         }
 
-        // Check worker status on all online nodes
-        function batchCheckStatus() {
-            const online = getOnlineAgentIds();
-            if (online.length === 0) return alert("Tidak ada VPS online.");
-            logMessage("BATCH", `📋 Mengecek status worker di ${online.length} VPS...`, "info");
-            const cmd = "echo '==='$(hostname)'===' && pgrep -a worker.py || echo 'WORKER_NOT_RUNNING' && tail -5 ~/workspace/worker.log 2>/dev/null";
-            online.forEach((agentId, idx) => {
-                setTimeout(() => {
-                    if (!ws || ws.readyState !== WebSocket.OPEN) return;
-                    ws.send(JSON.stringify({ type: "CMD", target: agentId, command: { type: "SHELL", cmd: cmd } }));
-                }, idx * 500);
+        // Ekspor data seluruh 490+ armada ke format CSV / Excel
+        function exportFleetCsv() {
+            const list = window.agentList || [];
+            if (list.length === 0) return alert("Tidak ada data armada untuk diekspor.");
+            
+            const headers = ["No", "Nama VPS", "Agent ID", "Status", "Uptime", "Free RAM (MB)", "CPU (%)", "Integritas (%)", "Latency (ms)"];
+            const rows = list.map((a, idx) => {
+                const integ = (a.integrity && a.integrity.pct !== undefined) ? a.integrity.pct : "-";
+                return [
+                    idx + 1,
+                    `"${(a.vps_name || '').replace(/"/g, '""')}"`,
+                    `"${(a.agent_id || '').replace(/"/g, '""')}"`,
+                    a.status || "offline",
+                    `"${a.uptime || '-'}"`,
+                    a.mem_free_mb !== undefined ? a.mem_free_mb : "-",
+                    a.cpu_pct !== undefined ? a.cpu_pct : "-",
+                    integ,
+                    a.latency_ms !== undefined ? a.latency_ms : "-"
+                ].join(",");
             });
-        }
-
-        // Apply setsid hardening to run.sh on all nodes
-        function batchHardenLauncher() {
-            const online = getOnlineAgentIds();
-            if (online.length === 0) return alert("Tidak ada VPS online.");
-            if (!confirm(`Terapkan hardening setsid di ${online.length} VPS?\n\nIni akan membuat run.sh lebih tahan terhadap kematian sesi Muse.\nLanjutkan?`)) return;
-            logMessage("BATCH", `🔒 Hardening launcher di ${online.length} VPS...`, "warning");
-            const cmd = "sed -i 's/nohup bash/setsid bash/g' ~/workspace/vps-channel-worker/run.sh 2>/dev/null; echo 'HARDEN_OK'";
-            online.forEach((agentId, idx) => {
-                setTimeout(() => {
-                    if (!ws || ws.readyState !== WebSocket.OPEN) return;
-                    ws.send(JSON.stringify({ type: "CMD", target: agentId, command: { type: "SHELL", cmd: cmd } }));
-                }, idx * 800);
-            });
+            
+            const csvContent = "data:text/csv;charset=utf-8," + [headers.join(","), ...rows].join("\n");
+            const encodedUri = encodeURI(csvContent);
+            const link = document.createElement("a");
+            const nowStr = new Date().toISOString().slice(0, 10);
+            link.setAttribute("href", encodedUri);
+            link.setAttribute("download", `armada_vps_muse_${nowStr}.csv`);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            logMessage("HUB", `📥 Berhasil mengekspor data ${list.length} VPS ke file CSV!`, "success");
         }
 
         // Restart worker.py on all nodes (watchdog will revive it)
