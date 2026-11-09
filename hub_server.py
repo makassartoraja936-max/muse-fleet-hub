@@ -617,6 +617,136 @@ DASHBOARD_HTML = """<!DOCTYPE html>
             gap: 6px;
         }
 
+        /* Terminal Grid Card Layout */
+        #terminal-screen {
+            display: grid !important;
+            grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+            gap: 10px;
+            padding: 14px 18px;
+            background: #06090e;
+            overflow-y: auto;
+            align-content: start;
+        }
+        .vps-tile-card {
+            background: #090d13;
+            border: 1px solid #21262d;
+            border-radius: 8px;
+            padding: 10px 12px;
+            cursor: pointer;
+            transition: border-color 0.15s ease, box-shadow 0.15s ease;
+            min-height: 100px;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            user-select: none;
+        }
+        .vps-tile-card:hover {
+            border-color: #388bfd;
+            box-shadow: 0 0 8px rgba(56, 139, 253, 0.3);
+        }
+        .vps-tile-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 4px;
+        }
+        .vps-tile-name {
+            font-size: 12px;
+            font-weight: 700;
+            color: #58a6ff;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 60%;
+        }
+        .vps-tile-badge {
+            font-size: 10px;
+            padding: 1px 7px;
+            border-radius: 4px;
+            font-weight: 600;
+            white-space: nowrap;
+        }
+        .vps-tile-time {
+            font-size: 10px;
+            color: #8b949e;
+        }
+        .vps-tile-preview {
+            font-family: 'Cascadia Code', Consolas, monospace;
+            font-size: 11px;
+            line-height: 1.4;
+            white-space: pre-wrap;
+            word-break: break-all;
+            overflow: hidden;
+            display: -webkit-box;
+            -webkit-line-clamp: 3;
+            -webkit-box-orient: vertical;
+            flex: 1;
+        }
+
+        /* Node Terminal Popup Modal */
+        #node-terminal-modal {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.75);
+            z-index: 90000;
+            align-items: center;
+            justify-content: center;
+        }
+        #node-terminal-modal.open {
+            display: flex;
+        }
+        .node-terminal-box {
+            background: #0d1117;
+            border: 1px solid #30363d;
+            border-radius: 10px;
+            width: 92vw;
+            max-width: 920px;
+            height: 85vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        .node-terminal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 18px;
+            background: #161b22;
+            border-bottom: 1px solid #30363d;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        .node-terminal-screen {
+            flex: 1;
+            overflow-y: auto;
+            padding: 14px 18px;
+            background: #06090e;
+            font-family: 'Cascadia Code', Consolas, monospace;
+            font-size: 13px;
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+        .node-terminal-footer {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 16px;
+            background: #161b22;
+            border-top: 1px solid #30363d;
+        }
+        .node-terminal-footer input {
+            flex: 1;
+            padding: 7px 12px;
+            font-family: monospace;
+            font-size: 13px;
+            background: #0d1117;
+            border: 1px solid #30363d;
+            border-radius: 6px;
+            color: #f0f6fc;
+            outline: none;
+        }
+
         /* Dedicated Fullscreen Terminal Console */
         #terminal-console-card.fullscreen {
             position: fixed !important;
@@ -1040,9 +1170,35 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                             <button class="btn btn-sm btn-primary" id="btn-toggle-fullscreen-term" onclick="toggleTerminalFullscreen()" style="font-size: 11px; font-weight: bold;">⛶ Layar Penuh</button>
                         </div>
                     </div>
-                    <div id="terminal-screen" style="height: 420px; background: #06090e; color: #7ee787; font-family: 'Cascadia Code', Consolas, 'Courier New', monospace; font-size: 13px; line-height: 1.5; padding: 14px 18px; overflow-y: auto; white-space: pre-wrap; word-break: break-all; border-top: 1px solid var(--border-color);">
-<span style="color: #8b949e;">// Terminal siap menerima output eksekusi shell dari seluruh VPS...
-// Klik tombol "⛶ Layar Penuh" di pojok kanan atas untuk membesarkan konsol satu layar penuh monitor Anda.</span>
+                    <div id="terminal-screen" style="height: 420px; border-top: 1px solid var(--border-color);">
+                        <div style="display:flex;align-items:center;justify-content:center;height:100%;color:#8b949e;font-size:13px;">
+                            // Terminal siap — jalankan perintah shell ke VPS untuk melihat kotak output di sini...
+                        </div>
+                    </div>
+                </div>
+
+                <!-- NODE TERMINAL POPUP MODAL -->
+                <div id="node-terminal-modal">
+                    <div class="node-terminal-box">
+                        <div class="node-terminal-header">
+                            <div style="display:flex;align-items:center;gap:10px;">
+                                <span style="font-weight:700;font-family:monospace;color:#58a6ff;font-size:14px;" id="node-term-modal-title">🖥️ Terminal</span>
+                                <span id="node-term-modal-badge" style="font-size:11px;padding:2px 8px;border-radius:4px;"></span>
+                            </div>
+                            <div style="display:flex;gap:8px;align-items:center;">
+                                <button class="btn btn-sm" onclick="copyNodeTerminalText()" style="font-size:11px;background:var(--bg-tertiary);border:1px solid var(--border-color);">📋 Salin</button>
+                                <button class="btn btn-sm" onclick="clearNodeTerminal()" style="font-size:11px;background:var(--bg-tertiary);border:1px solid var(--border-color);">🧹 Bersihkan</button>
+                                <button class="btn btn-sm" onclick="closeNodeTerminalModal()" style="font-size:18px;background:transparent;border:none;color:var(--text-secondary);cursor:pointer;">✕</button>
+                            </div>
+                        </div>
+                        <div class="node-terminal-screen" id="node-term-modal-screen"></div>
+                        <div class="node-terminal-footer">
+                            <input type="text" id="node-term-modal-input" placeholder="Ketik perintah bash dan tekan Enter..." onkeydown="if(event.key==='Enter')sendNodeTerminalCmd()">
+                            <label style="display:flex;align-items:center;gap:5px;font-size:12px;color:var(--text-secondary);white-space:nowrap;cursor:pointer;">
+                                <input type="checkbox" id="node-term-modal-detached" checked style="cursor:pointer;"> 🛡️ Detached
+                            </label>
+                            <button class="btn btn-sm btn-primary" onclick="sendNodeTerminalCmd()" style="white-space:nowrap;font-size:12px;padding:6px 14px;">⚡ Jalankan</button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -1355,6 +1511,11 @@ DASHBOARD_HTML = """<!DOCTYPE html>
             }
         }
 
+        // Per-node terminal history keyed by agentId
+        const nodeTerminalHistory = {};
+        // Currently open node in popup
+        let activeNodeTerminalId = null;
+
         function appendTerminalOutput(agentId, vpsName, text, exitCode) {
             const timestamp = new Date().toLocaleTimeString();
             const displayName = vpsName || agentId;
@@ -1368,6 +1529,11 @@ DASHBOARD_HTML = """<!DOCTYPE html>
             terminalLogsHistory.push(entry);
             if (terminalLogsHistory.length > 500) terminalLogsHistory.shift();
 
+            // Store in per-node history
+            if (!nodeTerminalHistory[agentId]) nodeTerminalHistory[agentId] = [];
+            nodeTerminalHistory[agentId].push(entry);
+            if (nodeTerminalHistory[agentId].length > 200) nodeTerminalHistory[agentId].shift();
+
             // Update terminal filter dropdown if new node seen
             const filterSel = document.getElementById("terminal-node-filter");
             if (filterSel && ![...filterSel.options].some(o => o.value === agentId)) {
@@ -1379,70 +1545,148 @@ DASHBOARD_HTML = """<!DOCTYPE html>
 
             if (terminalNodeFilter !== "ALL" && terminalNodeFilter !== agentId) return;
 
+            renderTerminalGrid();
+
+            // If popup is open for this node, append live
+            if (activeNodeTerminalId === agentId) {
+                appendToNodeTerminalPopup(entry);
+            }
+        }
+
+        function renderTerminalGrid() {
             const screen = document.getElementById("terminal-screen");
             if (!screen) return;
 
-            const color = (exitCode === 0) ? "#7ee787" : "#ff7b72";
-            const badgeBg = (exitCode === 0) ? "rgba(35, 134, 54, 0.25)" : "rgba(218, 54, 51, 0.25)";
-            const badgeBorder = (exitCode === 0) ? "#2ea043" : "#f85149";
+            // Build ordered list of nodes that have entries (honour current filter)
+            const agentIds = terminalNodeFilter === "ALL"
+                ? Object.keys(nodeTerminalHistory)
+                : (nodeTerminalHistory[terminalNodeFilter] ? [terminalNodeFilter] : []);
 
-            const logBlock = document.createElement("div");
-            logBlock.style.margin = "10px 0";
-            logBlock.style.padding = "8px 12px";
-            logBlock.style.background = "#090d13";
-            logBlock.style.borderRadius = "6px";
-            logBlock.style.borderLeft = `3px solid ${badgeBorder}`;
+            if (agentIds.length === 0) {
+                screen.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#8b949e;font-size:13px;">// Belum ada output shell untuk filter ini...</div>';
+                return;
+            }
 
-            logBlock.innerHTML = `
-                <div style="font-size: 11px; margin-bottom: 4px; display: flex; justify-content: space-between; color: var(--text-secondary);">
-                    <span><strong style="color: #58a6ff;">[${escapeHtml(displayName)}]</strong> <span style="font-size: 10px; font-family: monospace;">(${escapeHtml(agentId)})</span></span>
-                    <span><span style="background: ${badgeBg}; color: ${color}; border: 1px solid ${badgeBorder}; padding: 1px 6px; border-radius: 4px; font-size: 10px;">exit ${exitCode}</span> ${timestamp}</span>
+            screen.innerHTML = "";
+            agentIds.forEach(aid => {
+                const logs = nodeTerminalHistory[aid];
+                if (!logs || logs.length === 0) return;
+                const last = logs[logs.length - 1];
+                const color = (last.exitCode === 0) ? "#7ee787" : "#ff7b72";
+                const badgeBg = (last.exitCode === 0) ? "rgba(35,134,54,0.25)" : "rgba(218,54,51,0.25)";
+                const badgeBorder = (last.exitCode === 0) ? "#2ea043" : "#f85149";
+
+                const tile = document.createElement("div");
+                tile.className = "vps-tile-card";
+                tile.onclick = () => openNodeTerminalModal(aid);
+                tile.innerHTML = `
+                    <div class="vps-tile-header">
+                        <span class="vps-tile-name" title="${escapeHtml(aid)}">${escapeHtml(last.displayName)}</span>
+                        <span class="vps-tile-badge" style="background:${badgeBg};color:${color};border:1px solid ${badgeBorder};">exit ${last.exitCode}</span>
+                    </div>
+                    <span class="vps-tile-time">🕐 ${escapeHtml(last.timestamp)}  (${logs.length} perintah)</span>
+                    <div class="vps-tile-preview" style="color:${color};">${escapeHtml(last.text.slice(0, 400))}</div>
+                `;
+                screen.appendChild(tile);
+            });
+        }
+
+        function openNodeTerminalModal(agentId) {
+            activeNodeTerminalId = agentId;
+            const logs = nodeTerminalHistory[agentId] || [];
+            const displayName = logs.length > 0 ? logs[0].displayName : agentId;
+
+            const title = document.getElementById("node-term-modal-title");
+            if (title) title.textContent = "🖥️ " + displayName + "  (" + agentId + ")";
+
+            const screen = document.getElementById("node-term-modal-screen");
+            if (screen) {
+                screen.innerHTML = "";
+                logs.forEach(e => appendToNodeTerminalPopup(e));
+                screen.scrollTop = screen.scrollHeight;
+            }
+
+            const modal = document.getElementById("node-terminal-modal");
+            if (modal) modal.classList.add("open");
+        }
+
+        function appendToNodeTerminalPopup(entry) {
+            const screen = document.getElementById("node-term-modal-screen");
+            if (!screen) return;
+            const color = (entry.exitCode === 0) ? "#7ee787" : "#ff7b72";
+            const badgeBg = (entry.exitCode === 0) ? "rgba(35,134,54,0.25)" : "rgba(218,54,51,0.25)";
+            const badgeBorder = (entry.exitCode === 0) ? "#2ea043" : "#f85149";
+            const block = document.createElement("div");
+            block.style.margin = "10px 0";
+            block.style.padding = "8px 12px";
+            block.style.background = "#090d13";
+            block.style.borderRadius = "6px";
+            block.style.borderLeft = "3px solid " + badgeBorder;
+            block.innerHTML = `
+                <div style="font-size:11px;margin-bottom:4px;display:flex;justify-content:space-between;color:var(--text-secondary);">
+                    <span><strong style="color:#58a6ff;">[${escapeHtml(entry.displayName)}]</strong></span>
+                    <span><span style="background:${badgeBg};color:${color};border:1px solid ${badgeBorder};padding:1px 6px;border-radius:4px;font-size:10px;">exit ${entry.exitCode}</span> ${entry.timestamp}</span>
                 </div>
-                <div style="color: ${color}; white-space: pre-wrap; font-family: monospace;">${escapeHtml(text)}</div>
+                <div style="color:${color};white-space:pre-wrap;font-family:monospace;">${escapeHtml(entry.text)}</div>
             `;
-
-            screen.appendChild(logBlock);
+            screen.appendChild(block);
             screen.scrollTop = screen.scrollHeight;
+        }
+
+        function closeNodeTerminalModal() {
+            const modal = document.getElementById("node-terminal-modal");
+            if (modal) modal.classList.remove("open");
+            activeNodeTerminalId = null;
+        }
+
+        function copyNodeTerminalText() {
+            const screen = document.getElementById("node-term-modal-screen");
+            if (screen) navigator.clipboard.writeText(screen.innerText).catch(() => {});
+        }
+
+        function clearNodeTerminal() {
+            if (activeNodeTerminalId) {
+                nodeTerminalHistory[activeNodeTerminalId] = [];
+            }
+            const screen = document.getElementById("node-term-modal-screen");
+            if (screen) screen.innerHTML = '<span style="color:#8b949e;">// Layar terminal dibersihkan.</span>';
+            renderTerminalGrid();
+        }
+
+        function sendNodeTerminalCmd() {
+            const input = document.getElementById("node-term-modal-input");
+            if (!input) return;
+            const rawCmd = input.value.trim();
+            if (!rawCmd) return;
+            if (!activeNodeTerminalId) return alert("Tidak ada VPS yang dipilih!");
+            if (!ws || ws.readyState !== WebSocket.OPEN) return alert("WebSocket tidak terhubung!");
+
+            const detachedCheck = document.getElementById("node-term-modal-detached");
+            const isDetached = detachedCheck ? detachedCheck.checked : true;
+            let finalCmd = rawCmd;
+            if (isDetached) {
+                finalCmd = "setsid nohup bash -c " + JSON.stringify(rawCmd) + " > ~/workspace/task_run.log 2>&1 & echo '[OK] DETACHED_PID:'$!";
+            }
+
+            ws.send(JSON.stringify({
+                type: "CMD",
+                target: activeNodeTerminalId,
+                command: { type: "SHELL", cmd: finalCmd, auth: "muse-fleet-auth-2026" }
+            }));
+            input.value = "";
+            logMessage(activeNodeTerminalId, "💻 [SHELL]: " + rawCmd, "info");
         }
 
         function filterTerminalNode(val) {
             terminalNodeFilter = val || "ALL";
-            const screen = document.getElementById("terminal-screen");
-            if (!screen) return;
-            screen.innerHTML = "";
-            const filtered = (terminalNodeFilter === "ALL") ? terminalLogsHistory : terminalLogsHistory.filter(l => l.agentId === terminalNodeFilter);
-            if (filtered.length === 0) {
-                screen.innerHTML = `<span style="color: #8b949e;">// Belum ada output shell untuk filter ini...</span>`;
-                return;
-            }
-            filtered.forEach(entry => {
-                const color = (entry.exitCode === 0) ? "#7ee787" : "#ff7b72";
-                const badgeBg = (entry.exitCode === 0) ? "rgba(35, 134, 54, 0.25)" : "rgba(218, 54, 51, 0.25)";
-                const badgeBorder = (entry.exitCode === 0) ? "#2ea043" : "#f85149";
-
-                const logBlock = document.createElement("div");
-                logBlock.style.margin = "10px 0";
-                logBlock.style.padding = "8px 12px";
-                logBlock.style.background = "#090d13";
-                logBlock.style.borderRadius = "6px";
-                logBlock.style.borderLeft = `3px solid ${badgeBorder}`;
-
-                logBlock.innerHTML = `
-                    <div style="font-size: 11px; margin-bottom: 4px; display: flex; justify-content: space-between; color: var(--text-secondary);">
-                        <span><strong style="color: #58a6ff;">[${escapeHtml(entry.displayName)}]</strong> <span style="font-size: 10px; font-family: monospace;">(${escapeHtml(entry.agentId)})</span></span>
-                        <span><span style="background: ${badgeBg}; color: ${color}; border: 1px solid ${badgeBorder}; padding: 1px 6px; border-radius: 4px; font-size: 10px;">exit ${entry.exitCode}</span> ${entry.timestamp}</span>
-                    </div>
-                    <div style="color: ${color}; white-space: pre-wrap; font-family: monospace;">${escapeHtml(entry.text)}</div>
-                `;
-                screen.appendChild(logBlock);
-            });
-            screen.scrollTop = screen.scrollHeight;
+            renderTerminalGrid();
         }
 
         function clearTerminalScreen() {
             terminalLogsHistory = [];
+            Object.keys(nodeTerminalHistory).forEach(k => delete nodeTerminalHistory[k]);
             const screen = document.getElementById("terminal-screen");
-            if (screen) screen.innerHTML = `<span style="color: #8b949e;">// Terminal telah dibersihkan.</span>`;
+            if (screen) screen.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#8b949e;font-size:13px;">// Terminal telah dibersihkan.</div>';
         }
 
         function copyTerminalText() {
