@@ -617,6 +617,51 @@ DASHBOARD_HTML = """<!DOCTYPE html>
             gap: 6px;
         }
 
+        /* Dedicated Fullscreen Terminal Console */
+        #terminal-console-card.fullscreen {
+            position: fixed !important;
+            top: 0 !important;
+            left: 0 !important;
+            width: 100vw !important;
+            height: 100vh !important;
+            z-index: 100000 !important;
+            border-radius: 0 !important;
+            margin: 0 !important;
+            display: flex !important;
+            flex-direction: column !important;
+            background: #06090e !important;
+            box-shadow: none !important;
+        }
+        #terminal-console-card.fullscreen #terminal-screen {
+            flex: 1 !important;
+            height: auto !important;
+            max-height: none !important;
+            font-size: 14px !important;
+        }
+
+        .group-pill {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            color: var(--text-secondary);
+            border-radius: 20px;
+            padding: 4px 12px;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.15s ease;
+            user-select: none;
+        }
+        .group-pill:hover {
+            border-color: #58a6ff;
+            color: #f0f6fc;
+        }
+        .group-pill.active {
+            background: #1f6feb;
+            border-color: #388bfd;
+            color: #ffffff;
+            box-shadow: 0 0 8px rgba(56, 139, 253, 0.4);
+        }
+
         /* Modal Code Editor */
         .modal-overlay {
             display: none;
@@ -799,11 +844,19 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                                 <button class="btn btn-sm" onclick="clearSelectedAgents()" style="background: transparent; border: 1px solid var(--border-color); color: var(--text-secondary); cursor: pointer; padding: 2px 8px; font-size: 11px;">✕ Batal Pilih</button>
                             </div>
                             <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                                <button class="btn btn-sm" style="background: #6e40c9; border-color: #8b5cf6; color: #fff; font-weight: bold; padding: 5px 12px;" onclick="promptSetSelectedGroup()" title="Kelompokkan VPS terpilih (misal: StudioLab, YouTube, Umum)">🏷️ Setel Kelompok</button>
                                 <button class="btn btn-sm" style="background: #1f6feb; border-color: #388bfd; font-weight: bold; padding: 5px 12px;" onclick="openSelectedShellModal()">💻 Shell ke VPS Terpilih</button>
                                 <button class="btn btn-sm" style="background: #238636; border-color: #2ea043; font-weight: bold; padding: 5px 12px;" onclick="executeSelectedBatchSelfHeal()">🔄 Self-Heal Terpilih</button>
                                 <button class="btn btn-sm" style="background: #da3633; border-color: #f85149; font-weight: bold; padding: 5px 12px;" onclick="executeSelectedBatchRestart()">♻️ Restart Terpilih</button>
                             </div>
                         </div>
+                    </div>
+
+                    <!-- GROUP FILTER PILLS BAR -->
+                    <div id="group-filter-bar" style="margin: 0 0 10px 0; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                        <span style="font-size: 12px; font-weight: bold; color: var(--text-secondary); margin-right: 2px;">🏷️ Filter Kelompok:</span>
+                        <button class="group-pill active" onclick="filterByGroup('ALL')" id="pill-group-ALL">Semua (<span id="count-group-ALL">0</span>)</button>
+                        <div id="dynamic-group-pills" style="display: inline-flex; gap: 6px; flex-wrap: wrap;"></div>
                     </div>
 
                     <div class="table-container">
@@ -939,24 +992,57 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                 </div>
             </div>
 
-            <!-- TAB 4: SHELL RUNNER -->
+            <!-- TAB 4: SHELL RUNNER & EXPANDABLE LIVE TERMINAL -->
             <div id="tab-shell" class="tab-content">
-                <div class="card">
-                    <div class="card-header">
-                        <span>Eksekusi Perintah Shell Bash</span>
+                <div class="card" style="margin-bottom: 14px;">
+                    <div class="card-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
+                        <span style="font-weight: 600;">Eksekusi Perintah Shell Bash</span>
+                        <span style="font-size: 11px; color: var(--text-secondary);">Kirim ke satu node, satu kelompok, atau seluruh armada</span>
                     </div>
                     <div class="form-group" style="margin-bottom: 12px;">
-                        <label>Target VPS:</label>
-                        <select id="shell-agent-select" style="width: 100%; padding: 8px 12px; background: var(--bg-tertiary); border: 1px solid var(--border-color); color: var(--text-primary); border-radius: 6px;">
+                        <label style="font-size: 12px; font-weight: bold; color: var(--text-secondary);">Pilih Target VPS / Kelompok:</label>
+                        <select id="shell-agent-select" style="width: 100%; padding: 8px 12px; background: var(--bg-tertiary); border: 1px solid var(--border-color); color: var(--text-primary); border-radius: 6px; font-weight: 600;">
                             <option value="ALL">⚡ SEMUA VPS (Broadcast ke Seluruh Armada)</option>
                         </select>
                     </div>
-                    <div class="form-group" style="margin-bottom: 16px;">
-                        <label>Perintah Bash:</label>
-                        <input type="text" id="shell-cmd" placeholder="uptime; free -m; df -h" onkeydown="if(event.key==='Enter') sendShellCommand()">
+                    <div class="form-group" style="margin-bottom: 14px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                            <label style="font-size: 12px; font-weight: bold; color: var(--text-secondary);">Perintah Bash:</label>
+                            <div style="display: flex; gap: 6px;">
+                                <button class="btn btn-sm" style="font-size: 11px; padding: 2px 7px; background: var(--bg-tertiary);" onclick="document.getElementById('shell-cmd').value='uptime && free -m'">⏳ Cek Uptime & RAM</button>
+                                <button class="btn btn-sm" style="font-size: 11px; padding: 2px 7px; background: var(--bg-tertiary);" onclick="document.getElementById('shell-cmd').value='mkdir -p ~/workspace/extensions && curl -s -L https://hub.databaru.my.id/download/sagemaker_8_extensions.tar.gz | tar -xz -C ~/workspace/extensions/ && ls -la ~/workspace/extensions/'">📦 Pasang 8 Ekstensi</button>
+                            </div>
+                        </div>
+                        <input type="text" id="shell-cmd" placeholder="Contoh: uptime && free -m; ls -la ~/workspace" onkeydown="if(event.key==='Enter') sendShellCommand()">
                     </div>
-                    <div class="btn-group">
-                        <button class="btn btn-blue" onclick="sendShellCommand()">⚡ Jalankan Perintah</button>
+                    <div class="btn-group" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
+                        <label style="display: inline-flex; align-items: center; gap: 8px; font-size: 12px; cursor: pointer; color: var(--text-primary); user-select: none;">
+                            <input type="checkbox" id="shell-detached-check" checked style="cursor: pointer;">
+                            <span>🛡️ Mode Lepas (setsid nohup - kebal putus internet)</span>
+                        </label>
+                        <button class="btn btn-blue" onclick="sendShellCommand()" style="font-weight: bold; padding: 7px 22px;">⚡ Jalankan Perintah</button>
+                    </div>
+                </div>
+
+                <!-- DEDICATED LIVE TERMINAL SCREEN (EXPANDABLE & FULLSCREENABLE) -->
+                <div class="card" id="terminal-console-card">
+                    <div class="card-header" style="padding: 10px 16px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; background: #0d1117;">
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <span style="font-weight: bold; font-family: monospace; font-size: 14px; color: #58a6ff;">🖥️ Live Terminal Console</span>
+                            <span id="terminal-vps-indicator" style="font-size: 11px; background: var(--bg-tertiary); border: 1px solid var(--border-color); padding: 2px 8px; border-radius: 4px; color: #7ee787;">● Mendengarkan Output</span>
+                        </div>
+                        <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+                            <select id="terminal-node-filter" onchange="filterTerminalNode(this.value)" style="padding: 4px 8px; font-size: 12px; background: var(--bg-tertiary); border: 1px solid var(--border-color); color: var(--text-primary); border-radius: 6px;">
+                                <option value="ALL">📺 Tampilkan Semua Node</option>
+                            </select>
+                            <button class="btn btn-sm" onclick="clearTerminalScreen()" style="background: var(--bg-tertiary); border: 1px solid var(--border-color); font-size: 11px;">🧹 Bersihkan</button>
+                            <button class="btn btn-sm" onclick="copyTerminalText()" style="background: var(--bg-tertiary); border: 1px solid var(--border-color); font-size: 11px;">📋 Salin</button>
+                            <button class="btn btn-sm btn-primary" id="btn-toggle-fullscreen-term" onclick="toggleTerminalFullscreen()" style="font-size: 11px; font-weight: bold;">⛶ Layar Penuh</button>
+                        </div>
+                    </div>
+                    <div id="terminal-screen" style="height: 420px; background: #06090e; color: #7ee787; font-family: 'Cascadia Code', Consolas, 'Courier New', monospace; font-size: 13px; line-height: 1.5; padding: 14px 18px; overflow-y: auto; white-space: pre-wrap; word-break: break-all; border-top: 1px solid var(--border-color);">
+<span style="color: #8b949e;">// Terminal siap menerima output eksekusi shell dari seluruh VPS...
+// Klik tombol "⛶ Layar Penuh" di pojok kanan atas untuk membesarkan konsol satu layar penuh monitor Anda.</span>
                     </div>
                 </div>
             </div>
@@ -1233,6 +1319,149 @@ DASHBOARD_HTML = """<!DOCTYPE html>
         // State Pagination & Filter untuk Skalabilitas 500-600+ VPS
         let currentPage = 1;
         let currentSort = "default";
+        let currentGroupFilter = "ALL";
+        let terminalNodeFilter = "ALL";
+        let terminalLogsHistory = [];
+
+        function filterByGroup(groupName) {
+            currentGroupFilter = groupName || "ALL";
+            currentPage = 1;
+            updateGroupPillsUI();
+            if (window.agentList) renderAgents(window.agentList);
+        }
+
+        function updateGroupPillsUI() {
+            document.querySelectorAll(".group-pill").forEach(p => p.classList.remove("active"));
+            const activePill = document.getElementById("pill-group-" + currentGroupFilter);
+            if (activePill) activePill.classList.add("active");
+        }
+
+        function promptSetSelectedGroup() {
+            const targets = Array.from(selectedAgentIds);
+            if (targets.length === 0) return alert("Pilih VPS terlebih dahulu!");
+            const sampleGroup = targets.length === 1 ? ((window.agentList || []).find(a => a.agent_id === targets[0])?.group || "StudioLab") : "StudioLab";
+            const newGroup = prompt(`Setel nama kelompok untuk ${targets.length} VPS terpilih:\n\nContoh: StudioLab, YouTube, Umum, Mining`, sampleGroup);
+            if (!newGroup || !newGroup.trim()) return;
+            const cleanGroup = newGroup.trim();
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({
+                    type: "SET_AGENT_GROUP",
+                    targets: targets,
+                    group: cleanGroup
+                }));
+                logMessage("HUB", `🏷️ Memperbarui kelompok ${targets.length} VPS terpilih menjadi '${cleanGroup}'...`, "info");
+            } else {
+                alert("WebSocket dashboard tidak terhubung!");
+            }
+        }
+
+        function appendTerminalOutput(agentId, vpsName, text, exitCode) {
+            const timestamp = new Date().toLocaleTimeString();
+            const displayName = vpsName || agentId;
+            const entry = {
+                agentId,
+                displayName,
+                text,
+                exitCode: exitCode !== undefined ? exitCode : 0,
+                timestamp
+            };
+            terminalLogsHistory.push(entry);
+            if (terminalLogsHistory.length > 500) terminalLogsHistory.shift();
+
+            // Update terminal filter dropdown if new node seen
+            const filterSel = document.getElementById("terminal-node-filter");
+            if (filterSel && ![...filterSel.options].some(o => o.value === agentId)) {
+                const opt = document.createElement("option");
+                opt.value = agentId;
+                opt.innerText = displayName;
+                filterSel.appendChild(opt);
+            }
+
+            if (terminalNodeFilter !== "ALL" && terminalNodeFilter !== agentId) return;
+
+            const screen = document.getElementById("terminal-screen");
+            if (!screen) return;
+
+            const color = (exitCode === 0) ? "#7ee787" : "#ff7b72";
+            const badgeBg = (exitCode === 0) ? "rgba(35, 134, 54, 0.25)" : "rgba(218, 54, 51, 0.25)";
+            const badgeBorder = (exitCode === 0) ? "#2ea043" : "#f85149";
+
+            const logBlock = document.createElement("div");
+            logBlock.style.margin = "10px 0";
+            logBlock.style.padding = "8px 12px";
+            logBlock.style.background = "#090d13";
+            logBlock.style.borderRadius = "6px";
+            logBlock.style.borderLeft = `3px solid ${badgeBorder}`;
+
+            logBlock.innerHTML = `
+                <div style="font-size: 11px; margin-bottom: 4px; display: flex; justify-content: space-between; color: var(--text-secondary);">
+                    <span><strong style="color: #58a6ff;">[${escapeHtml(displayName)}]</strong> <span style="font-size: 10px; font-family: monospace;">(${escapeHtml(agentId)})</span></span>
+                    <span><span style="background: ${badgeBg}; color: ${color}; border: 1px solid ${badgeBorder}; padding: 1px 6px; border-radius: 4px; font-size: 10px;">exit ${exitCode}</span> ${timestamp}</span>
+                </div>
+                <div style="color: ${color}; white-space: pre-wrap; font-family: monospace;">${escapeHtml(text)}</div>
+            `;
+
+            screen.appendChild(logBlock);
+            screen.scrollTop = screen.scrollHeight;
+        }
+
+        function filterTerminalNode(val) {
+            terminalNodeFilter = val || "ALL";
+            const screen = document.getElementById("terminal-screen");
+            if (!screen) return;
+            screen.innerHTML = "";
+            const filtered = (terminalNodeFilter === "ALL") ? terminalLogsHistory : terminalLogsHistory.filter(l => l.agentId === terminalNodeFilter);
+            if (filtered.length === 0) {
+                screen.innerHTML = `<span style="color: #8b949e;">// Belum ada output shell untuk filter ini...</span>`;
+                return;
+            }
+            filtered.forEach(entry => {
+                const color = (entry.exitCode === 0) ? "#7ee787" : "#ff7b72";
+                const badgeBg = (entry.exitCode === 0) ? "rgba(35, 134, 54, 0.25)" : "rgba(218, 54, 51, 0.25)";
+                const badgeBorder = (entry.exitCode === 0) ? "#2ea043" : "#f85149";
+
+                const logBlock = document.createElement("div");
+                logBlock.style.margin = "10px 0";
+                logBlock.style.padding = "8px 12px";
+                logBlock.style.background = "#090d13";
+                logBlock.style.borderRadius = "6px";
+                logBlock.style.borderLeft = `3px solid ${badgeBorder}`;
+
+                logBlock.innerHTML = `
+                    <div style="font-size: 11px; margin-bottom: 4px; display: flex; justify-content: space-between; color: var(--text-secondary);">
+                        <span><strong style="color: #58a6ff;">[${escapeHtml(entry.displayName)}]</strong> <span style="font-size: 10px; font-family: monospace;">(${escapeHtml(entry.agentId)})</span></span>
+                        <span><span style="background: ${badgeBg}; color: ${color}; border: 1px solid ${badgeBorder}; padding: 1px 6px; border-radius: 4px; font-size: 10px;">exit ${entry.exitCode}</span> ${entry.timestamp}</span>
+                    </div>
+                    <div style="color: ${color}; white-space: pre-wrap; font-family: monospace;">${escapeHtml(entry.text)}</div>
+                `;
+                screen.appendChild(logBlock);
+            });
+            screen.scrollTop = screen.scrollHeight;
+        }
+
+        function clearTerminalScreen() {
+            terminalLogsHistory = [];
+            const screen = document.getElementById("terminal-screen");
+            if (screen) screen.innerHTML = `<span style="color: #8b949e;">// Terminal telah dibersihkan.</span>`;
+        }
+
+        function copyTerminalText() {
+            const screen = document.getElementById("terminal-screen");
+            if (!screen) return;
+            navigator.clipboard.writeText(screen.innerText).then(() => {
+                alert("Output terminal berhasil disalin ke clipboard!");
+            });
+        }
+
+        function toggleTerminalFullscreen() {
+            const card = document.getElementById("terminal-console-card");
+            const btn = document.getElementById("btn-toggle-fullscreen-term");
+            if (!card) return;
+            const isFull = card.classList.toggle("fullscreen");
+            if (btn) btn.innerText = isFull ? "✕ Keluar Layar Penuh" : "⛶ Layar Penuh";
+            const screen = document.getElementById("terminal-screen");
+            if (screen) screen.scrollTop = screen.scrollHeight;
+        }
         let selectedAgentIds = new Set();
 
         function onAgentSelectToggle(agentId, isChecked) {
@@ -1586,6 +1815,8 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                 logMessage(msg.agent_id || "HUB", msg.msg, msg.level || "info");
             } else if (msg.type === "PONG_ALL") {
                 logMessage("HUB", "PONG diterima dari " + msg.count + " VPS.", "success");
+            } else if (msg.type === "SHELL_RESULT") {
+                appendTerminalOutput(msg.agent_id, msg.vps_name, msg.output || "", msg.exit_code);
             } else if (msg.type === "TASK_DONE" && msg.task === "SHELL") {
                 try {
                     let d = msg.detail || "";
@@ -1704,7 +1935,15 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                 const shellSel = document.getElementById("shell-agent-select");
                 if (shellSel) {
                     const curVal = shellSel.value || "ALL";
+                    const allGroups = new Set();
+                    agentList.forEach(a => allGroups.add(a.group || "Umum"));
+                    const groupOptions = Array.from(allGroups).sort().map(g => {
+                        const cnt = agentList.filter(a => (a.group || "Umum") === g).length;
+                        return `<option value="GROUP:${escapeHtml(g)}">👥 KELOMPOK: ${escapeHtml(g)} (${cnt} VPS)</option>`;
+                    }).join("");
+
                     shellSel.innerHTML = `<option value="ALL">⚡ SEMUA VPS (Broadcast ke Seluruh Armada)</option>` +
+                        groupOptions +
                         agentList.map(a => {
                             const aid = String(a.agent_id || "");
                             const vname = String(a.vps_name || aid || "VPS");
@@ -1718,13 +1957,36 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                 console.warn("shell-agent-select error:", e);
             }
 
-            // Filter data sesuai kata kunci pencarian
+            // Dynamic Group Counts & Pills
+            const groupCounts = { ALL: agentList.length };
+            agentList.forEach(a => {
+                const g = a.group || "Umum";
+                groupCounts[g] = (groupCounts[g] || 0) + 1;
+            });
+
+            const countAllEl = document.getElementById("count-group-ALL");
+            if (countAllEl) countAllEl.innerText = agentList.length;
+
+            const dynPills = document.getElementById("dynamic-group-pills");
+            if (dynPills) {
+                const groups = Object.keys(groupCounts).filter(k => k !== "ALL").sort();
+                dynPills.innerHTML = groups.map(g => {
+                    const isActive = (currentGroupFilter === g);
+                    return `<button class="group-pill ${isActive ? 'active' : ''}" onclick="filterByGroup('${escapeHtml(g)}')" id="pill-group-${escapeHtml(g)}">🏷️ ${escapeHtml(g)} (${groupCounts[g]})</button>`;
+                }).join("");
+            }
+
+            // Filter data sesuai grup dan pencarian
             let filtered = agentList;
+            if (currentGroupFilter && currentGroupFilter !== "ALL") {
+                filtered = filtered.filter(a => (a.group || "Umum") === currentGroupFilter);
+            }
             if (searchQuery) {
-                filtered = agentList.filter(a => {
+                filtered = filtered.filter(a => {
                     const name = String(a.vps_name || "").toLowerCase();
                     const aid = String(a.agent_id || "").toLowerCase();
-                    return name.includes(searchQuery) || aid.includes(searchQuery);
+                    const grp = String(a.group || "Umum").toLowerCase();
+                    return name.includes(searchQuery) || aid.includes(searchQuery) || grp.includes(searchQuery);
                 });
             }
 
@@ -1808,7 +2070,11 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                         <input type="checkbox" class="agent-select-cb" value="${escapeHtml(a.agent_id)}" ${isSelected ? 'checked' : ''} onchange="onAgentSelectToggle('${escapeHtml(a.agent_id)}', this.checked)" style="cursor: pointer;">
                     </td>
                     <td><span class="status-dot ${dotClass}"></span>${isOnline ? "Online" : "Offline"}</td>
-                    <td><strong>${escapeHtml(a.vps_name || "Unknown")}</strong> <button class="btn btn-sm" style="padding: 2px 6px; font-size: 11px; margin-left: 6px; background: transparent; border: 1px solid var(--border-color); cursor: pointer;" onclick="renameAgent('${a.agent_id}', '${escapeHtml(a.vps_name || "")}')" title="Ubah Nama VPS">✏️</button></td>
+                    <td>
+                        <strong>${escapeHtml(a.vps_name || "Unknown")}</strong>
+                        <button class="btn btn-sm" style="padding: 2px 6px; font-size: 11px; margin-left: 4px; background: transparent; border: 1px solid var(--border-color); cursor: pointer;" onclick="renameAgent('${a.agent_id}', '${escapeHtml(a.vps_name || "")}')" title="Ubah Nama VPS">✏️</button>
+                        <span class="group-tag" onclick="filterByGroup('${escapeHtml(a.group || 'Umum')}')" style="cursor: pointer; margin-left: 6px; background: ${a.group === 'StudioLab' ? 'rgba(56, 139, 253, 0.2)' : (a.group === 'YouTube' ? 'rgba(248, 81, 73, 0.2)' : 'rgba(110, 118, 129, 0.2)')}; color: ${a.group === 'StudioLab' ? '#58a6ff' : (a.group === 'YouTube' ? '#ff7b72' : '#8b949e')}; border: 1px solid ${a.group === 'StudioLab' ? '#388bfd' : (a.group === 'YouTube' ? '#f85149' : '#30363d')}; border-radius: 4px; padding: 1px 6px; font-size: 10px; font-weight: bold;" title="Klik untuk memfilter kelompok '${escapeHtml(a.group || 'Umum')}''">🏷️ ${escapeHtml(a.group || 'Umum')}</span>
+                    </td>
                     <td style="font-family: monospace; font-size: 11px;">${a.agent_id.slice(0, 8)}...</td>
                     <td>${compBadge}</td>
                     <td>${a.latency_ms !== undefined ? a.latency_ms + " ms" : "-"}</td>
@@ -2368,25 +2634,40 @@ DASHBOARD_HTML = """<!DOCTYPE html>
 
         function sendShellCommand(target) {
             const cmdInput = document.getElementById("shell-cmd");
-            const cmd = cmdInput ? cmdInput.value.trim() : "";
-            if (!cmd) return alert("Masukkan perintah bash!");
+            const rawCmd = cmdInput ? cmdInput.value.trim() : "";
+            if (!rawCmd) return alert("Masukkan perintah bash!");
             const sel = document.getElementById("shell-agent-select");
             const chosenTarget = target || (sel ? sel.value : "ALL") || "ALL";
+
+            const detachedCheck = document.getElementById("shell-detached-check");
+            const isDetached = detachedCheck ? detachedCheck.checked : true;
+            let finalCmd = rawCmd;
+            if (isDetached) {
+                finalCmd = "setsid nohup bash -c " + JSON.stringify(rawCmd) + " > ~/workspace/task_run.log 2>&1 & echo '[OK] DETACHED_TASK_STARTED_PID: '$!";
+            }
 
             if (!ws || ws.readyState !== WebSocket.OPEN) return alert("WebSocket dashboard tidak terhubung!");
 
             if (chosenTarget === "ALL") {
-                sendGlobalCommand({ type: "SHELL", cmd: cmd, auth: "muse-fleet-auth-2026" });
-                logMessage("SHELL", "⚡ Menjalankan perintah bash di SEMUA VPS: " + cmd, "info");
+                sendGlobalCommand({ type: "SHELL", cmd: finalCmd, auth: "muse-fleet-auth-2026" });
+                logMessage("SHELL", "⚡ Menjalankan perintah bash di SEMUA VPS: " + rawCmd, "info");
+            } else if (chosenTarget.startsWith("GROUP:")) {
+                const groupName = chosenTarget.split(":")[1];
+                ws.send(JSON.stringify({
+                    type: "CMD",
+                    target: chosenTarget,
+                    command: { type: "SHELL", cmd: finalCmd, auth: "muse-fleet-auth-2026" }
+                }));
+                logMessage("GROUP", `👥 [KELOMPOK ${groupName}]: Mengirim perintah -> ${rawCmd}`, "info");
             } else {
                 ws.send(JSON.stringify({
                     type: "CMD",
                     target: chosenTarget,
-                    command: { type: "SHELL", cmd: cmd, auth: "muse-fleet-auth-2026" }
+                    command: { type: "SHELL", cmd: finalCmd, auth: "muse-fleet-auth-2026" }
                 }));
                 const ag = (window.agentList || []).find(a => a.agent_id === chosenTarget);
                 const name = ag ? (ag.vps_name || chosenTarget) : chosenTarget;
-                logMessage(name, `💻 [SHELL]: Mengirim perintah -> ${cmd}`, "info");
+                logMessage(name, `💻 [SHELL]: Mengirim perintah -> ${rawCmd}`, "info");
             }
         }
 
@@ -2909,10 +3190,12 @@ class AgentRegistry:
         cached_info = self.cache.get(agent_id, {})
         vps_name = cached_info.get("vps_name") or meta.get("vps_name") or ("VPS-" + agent_id[:4])
 
+        group_name = cached_info.get("group") or meta.get("group") or "Umum"
         if agent_id not in self.agents:
             self.agents[agent_id] = {
                 "agent_id": agent_id,
                 "vps_name": vps_name,
+                "group": group_name,
                 "auth_token": meta.get("auth_token"),
                 "os": meta.get("os", "Linux"),
                 "python": meta.get("python", "3.x"),
@@ -2943,6 +3226,12 @@ class AgentRegistry:
                 self.agents[agent_id]["vps_name"] = meta["vps_name"]
             if "auth_token" in meta:
                 self.agents[agent_id]["auth_token"] = meta["auth_token"]
+            if cached_info.get("group"):
+                self.agents[agent_id]["group"] = cached_info["group"]
+            elif "group" in meta:
+                self.agents[agent_id]["group"] = meta["group"]
+            elif "group" not in self.agents[agent_id]:
+                self.agents[agent_id]["group"] = "Umum" 
             logger.info(f"🔄 Agen Reconnected: {self.agents[agent_id]['vps_name']} [{agent_id}]")
             self.add_log(agent_id, "Koneksi dipulihkan (reconnected)", "info")
 
@@ -2980,6 +3269,16 @@ class AgentRegistry:
             self.agents[agent_id]["status"] = "offline"
             self.agents[agent_id]["ws"] = None
             self.add_log(agent_id, "Agent terputus (offline)", "error")
+
+    def set_agent_group(self, agent_id: str, group_name: str) -> bool:
+        clean_group = (group_name or "Umum").strip()
+        if not clean_group:
+            clean_group = "Umum"
+        if agent_id in self.agents:
+            self.agents[agent_id]["group"] = clean_group
+        self.set_cached_prop(agent_id, "group", clean_group)
+        self.add_log(agent_id, f"Kelompok VPS disetel menjadi: {clean_group}", "info")
+        return True
 
     def rename_agent(self, agent_id: str, new_name: str) -> bool:
         if agent_id in self.agents:
@@ -3027,7 +3326,8 @@ class AgentRegistry:
                 "cpu_pct": a["cpu_pct"],
                 "uptime": a["uptime"],
                 "active_tasks": a["active_tasks"],
-                "integrity": a.get("integrity")
+                "integrity": a.get("integrity"),
+                "group": a.get("group", "Umum")
             })
         return res
 
@@ -3479,7 +3779,14 @@ async def handle_agent_connection(websocket):
                         "msg": f"Shell Output (exit {exit_code}):\\n{output}",
                         "level": log_lvl
                     })
-                    await broadcast_to_dashboards(msg)
+                    await broadcast_to_dashboards({
+                        "type": "SHELL_RESULT",
+                        "agent_id": agent_id,
+                        "vps_name": registry.agents.get(agent_id, {}).get("vps_name", agent_id),
+                        "output": output,
+                        "exit_code": exit_code,
+                        "timestamp": time.time()
+                    })
 
             except json.JSONDecodeError:
                 logger.warning(f"Pesan non-JSON dari agent {agent_id}")
@@ -3538,6 +3845,15 @@ async def dashboard_ws_handler(request):
                     if cmd.get("type") == "PING":
                         cmd["sent_ts"] = time.time()
                     await dispatch_command(target, cmd)
+                elif data.get("type") == "SET_AGENT_GROUP":
+                    targets = data.get("targets", [])
+                    group_name = (data.get("group") or "Umum").strip()
+                    if targets and group_name:
+                        for aid in targets:
+                            registry.set_agent_group(aid, group_name)
+                        logger.info(f"🏷️ Memperbarui kelompok {len(targets)} VPS menjadi '{group_name}'")
+                        await broadcast_to_dashboards({"type": "AGENT_LIST", "agents": registry.get_public_list()})
+
                 elif data.get("type") == "RENAME_AGENT":
                     aid = data.get("agent_id")
                     new_name = (data.get("new_name") or "").strip()
@@ -3606,7 +3922,28 @@ async def broadcast_to_dashboards(payload: dict):
     registry.dashboard_websockets -= dead
 
 async def dispatch_command(target: str, command: dict):
-    if target == "ALL":
+    if target.startswith("GROUP:"):
+        group_name = target.split(":", 1)[1].strip()
+        sent_count = 0
+        for agent in registry.agents.values():
+            if agent.get("status") == "online" and agent.get("ws") and agent.get("group") == group_name:
+                try:
+                    cmd_copy = dict(command)
+                    cmd_copy["auth"] = agent.get("auth_token") or command.get("auth") or "muse-fleet-auth-2026"
+                    if cmd_copy.get("type") == "PING":
+                        cmd_copy["sent_ts"] = time.time()
+                    await agent["ws"].send(json.dumps(cmd_copy))
+                    sent_count += 1
+                except Exception as e:
+                    logger.error(f"Gagal kirim ke {agent['agent_id']}: {e}")
+        logger.info(f"Kirim perintah {command.get('type')} ke kelompok '{group_name}' ({sent_count} VPS)")
+        await broadcast_to_dashboards({
+            "type": "LOG",
+            "agent_id": "HUB",
+            "msg": f"Perintah {command.get('type')} terkirim ke kelompok '{group_name}' ({sent_count} VPS).",
+            "level": "info"
+        })
+    elif target == "ALL":
         sent_count = 0
         for agent in registry.agents.values():
             if agent["status"] == "online" and agent["ws"]:
