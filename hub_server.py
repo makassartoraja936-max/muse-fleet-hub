@@ -1091,45 +1091,50 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                 </div>
             </div>
 
-            <!-- MODAL BATCH SHELL RUNNER (MULTI-SELECT VPS) -->
+            <!-- MODAL BATCH SHELL RUNNER (MULTI-SELECT VPS - EXPANDED & SPACIOUS) -->
             <div id="batch-shell-modal" class="modal-overlay">
-                <div class="modal-box" style="max-width: 680px; height: auto; max-height: 90vh;">
-                    <div class="modal-header">
-                        <h3>💻 Eksekusi Shell Berkelompok (<span id="batch-modal-vps-count">0</span> VPS Terpilih)</h3>
-                        <button class="btn btn-sm" style="background: transparent; border: none; font-size: 18px; cursor: pointer; color: var(--text-secondary);" onclick="closeBatchShellModal()">✕</button>
+                <div class="modal-box" style="max-width: 860px; width: 92vw; height: auto; max-height: 90vh;">
+                    <div class="modal-header" style="padding: 14px 22px;">
+                        <h3 style="font-size: 16px;">💻 Eksekusi Shell Berkelompok (<span id="batch-modal-vps-count">0</span> VPS Terpilih)</h3>
+                        <button class="btn btn-sm" style="background: transparent; border: none; font-size: 20px; cursor: pointer; color: var(--text-secondary);" onclick="closeBatchShellModal()">✕</button>
                     </div>
-                    <div class="modal-body" style="padding: 16px 20px; overflow-y: auto;">
-                        <div style="margin-bottom: 12px;">
-                            <label style="font-size: 12px; font-weight: bold; color: var(--text-secondary);">Target VPS Terpilih:</label>
-                            <div id="batch-modal-targets-preview" style="margin-top: 6px; max-height: 75px; overflow-y: auto; padding: 6px 10px; background: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: 6px; font-family: monospace; font-size: 11px; color: #58a6ff; display: flex; flex-wrap: wrap; gap: 6px;">
+                    <div class="modal-body" style="display: flex; flex-direction: column; gap: 16px; padding: 20px 24px; overflow-y: auto; background: var(--bg-secondary);">
+                        <div>
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                                <label style="font-size: 13px; font-weight: bold; color: var(--text-primary);">Target VPS Terpilih:</label>
+                                <span style="font-size: 11px; color: var(--text-secondary);">Gunakan centang di tabel untuk menambah/mengurangi</span>
+                            </div>
+                            <div id="batch-modal-targets-preview" style="max-height: 90px; overflow-y: auto; padding: 8px 12px; background: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: 6px; font-family: monospace; font-size: 12px; color: #58a6ff; display: flex; flex-wrap: wrap; gap: 6px;">
                             </div>
                         </div>
-                        <div style="margin-bottom: 12px;">
-                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; flex-wrap: wrap; gap: 6px;">
-                                <label style="font-size: 12px; font-weight: bold; color: var(--text-secondary);">Perintah Bash:</label>
-                                <div style="display: flex; gap: 6px;">
-                                    <button class="btn btn-sm" style="font-size: 11px; padding: 2px 7px; background: var(--bg-tertiary);" onclick="insertTemplateCmd('extensions')">📦 Pasang 8 Ekstensi</button>
-                                    <button class="btn btn-sm" style="font-size: 11px; padding: 2px 7px; background: var(--bg-tertiary);" onclick="insertTemplateCmd('check_ext')">🔍 Cek Extensions</button>
-                                    <button class="btn btn-sm" style="font-size: 11px; padding: 2px 7px; background: var(--bg-tertiary);" onclick="insertTemplateCmd('uptime')">⏳ Cek Uptime</button>
+
+                        <div>
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; flex-wrap: wrap; gap: 8px;">
+                                <label style="font-size: 13px; font-weight: bold; color: var(--text-primary);">Perintah Bash:</label>
+                                <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+                                    <button class="btn btn-sm" style="font-size: 11px; padding: 3px 8px; background: var(--bg-tertiary); border: 1px solid #388bfd; color: #58a6ff; font-weight: 600;" onclick="insertTemplateCmd('extensions')">📦 Pasang 8 Ekstensi</button>
+                                    <button class="btn btn-sm" style="font-size: 11px; padding: 3px 8px; background: var(--bg-tertiary); border: 1px solid var(--border-color);" onclick="insertTemplateCmd('check_ext')">🔍 Cek Extensions</button>
+                                    <button class="btn btn-sm" style="font-size: 11px; padding: 3px 8px; background: var(--bg-tertiary); border: 1px solid var(--border-color);" onclick="insertTemplateCmd('uptime')">⏳ Cek Uptime</button>
                                 </div>
                             </div>
-                            <textarea id="batch-modal-shell-cmd" class="code-textarea" style="height: 105px; padding: 10px; font-size: 12px; font-family: monospace;" placeholder="Masukkan perintah bash untuk dijalankan di VPS terpilih..."></textarea>
+                            <textarea id="batch-modal-shell-cmd" style="width: 100%; height: 125px; padding: 12px; font-size: 13px; font-family: monospace; line-height: 1.5; background: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: 6px; color: #f0f6fc; resize: vertical; outline: none; box-sizing: border-box;" placeholder="Masukkan perintah bash untuk dijalankan di seluruh VPS terpilih..."></textarea>
                         </div>
-                        <div style="background: rgba(56, 139, 253, 0.08); border: 1px solid rgba(56, 139, 253, 0.3); border-radius: 6px; padding: 10px 14px;">
-                            <label style="display: flex; align-items: flex-start; gap: 10px; cursor: pointer; font-size: 13px; font-weight: bold; color: var(--text-primary); user-select: none;">
-                                <input type="checkbox" id="batch-modal-detached" checked style="margin-top: 3px; cursor: pointer;">
+
+                        <div style="background: rgba(56, 139, 253, 0.1); border: 1px solid rgba(56, 139, 253, 0.35); border-radius: 8px; padding: 14px 16px;">
+                            <label style="display: flex; align-items: flex-start; gap: 12px; cursor: pointer; font-size: 13px; font-weight: bold; color: var(--text-primary); user-select: none;">
+                                <input type="checkbox" id="batch-modal-detached" checked style="margin-top: 3px; cursor: pointer; width: 16px; height: 16px;">
                                 <div>
-                                    <span>🛡️ Mode Lepas / Background Detached (setsid + nohup)</span>
-                                    <div style="font-weight: normal; font-size: 11px; color: var(--text-secondary); margin-top: 3px;">
-                                        Perintah dilepas dari sesi terminal. Proses <strong>100% tetap berjalan di latar belakang VPS</strong> sampai selesai meskipun internet mati, browser ditutup, atau koneksi terputus. Log otomatis dialirkan ke <code>~/workspace/task_run.log</code>.
+                                    <span style="font-size: 14px;">🛡️ Mode Lepas / Background Detached (setsid + nohup)</span>
+                                    <div style="font-weight: normal; font-size: 12px; color: var(--text-secondary); margin-top: 4px; line-height: 1.4;">
+                                        Perintah otomatis dilepas dari sesi terminal. Proses <strong>100% tetap berjalan di VPS</strong> sampai selesai meskipun internet PC mati, browser ditutup, atau koneksi terputus. Log eksekusi otomatis tersimpan ke <code>~/workspace/task_run.log</code>.
                                     </div>
                                 </div>
                             </label>
                         </div>
                     </div>
-                    <div class="modal-footer" style="padding: 12px 20px; display: flex; justify-content: flex-end; gap: 10px;">
-                        <button class="btn btn-sm" onclick="closeBatchShellModal()">Batal</button>
-                        <button class="btn btn-blue btn-sm" style="font-weight: bold; padding: 6px 18px;" onclick="executeBatchShellModal()">⚡ Jalankan di VPS Terpilih</button>
+                    <div class="modal-footer" style="padding: 14px 22px; display: flex; justify-content: flex-end; gap: 12px;">
+                        <button class="btn btn-sm" style="padding: 7px 16px;" onclick="closeBatchShellModal()">Batal</button>
+                        <button class="btn btn-blue btn-sm" style="font-weight: bold; padding: 7px 22px; font-size: 13px;" onclick="executeBatchShellModal()">⚡ Jalankan di VPS Terpilih</button>
                     </div>
                 </div>
             </div>
