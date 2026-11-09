@@ -551,7 +551,7 @@ async def run_worker():
                 ping_interval=20,
                 ping_timeout=20,
                 open_timeout=15,
-                close_timeout=10
+                close_timeout=10, max_size=50*1024*1024
             ) as ws:
                 logger.info("Connected to Hub successfully!")
 

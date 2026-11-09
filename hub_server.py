@@ -2409,10 +2409,15 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                 }
 
             } else if (msg.type === "FS_UPLOAD_RESULT") {
+                if (fsUploadTimeout) {
+                    clearTimeout(fsUploadTimeout);
+                    fsUploadTimeout = null;
+                }
                 if (msg.error) {
                     alert("Gagal upload file: " + msg.error);
+                    logMessage("FS", `❌ Gagal mengunggah ${msg.path}: ${msg.error}`, "error");
                 } else {
-                    logMessage("FS", `File berhasil diunggah: ${msg.path} (${formatBytes(msg.bytes_written || 0)})`, "success");
+                    logMessage("FS", `✅ File berhasil diunggah: ${msg.path} (${formatBytes(msg.bytes_written || 0)})`, "success");
                     refreshFsDirectory();
                 }
             }
@@ -2503,6 +2508,7 @@ ${name}
             document.getElementById("code-editor-textarea").focus();
         }
 
+        let fsUploadTimeout = null;
         function handleFileUpload(event) {
             const file = event.target.files[0];
             if (!file) return;
@@ -2516,11 +2522,16 @@ ${name}
                 return;
             }
 
+            const statsEl = document.getElementById("fs-stats-info");
+            if (statsEl) {
+                statsEl.innerHTML = `<span style="color: #388bfd; font-weight: bold; background: rgba(56,139,253,0.15); padding: 4px 10px; border-radius: 6px; border: 1px solid #388bfd;">⏳ Mengunggah ${escapeHtml(file.name)} (${formatBytes(file.size)})... Mohon tunggu</span>`;
+            }
+
             const reader = new FileReader();
             reader.onload = function(e) {
                 const b64Data = e.target.result.split(",")[1];
                 const fullP = (currentFsPath === "/" ? "" : currentFsPath) + "/" + file.name;
-                logMessage("FS", `Mengunggah ${file.name} (${formatBytes(file.size)}) ke VPS...`, "info");
+                logMessage("FS", `⏳ Mengunggah ${file.name} (${formatBytes(file.size)}) ke VPS [${currentFsAgent}]...`, "info");
                 if (ws && ws.readyState === WebSocket.OPEN) {
                     ws.send(JSON.stringify({
                         type: "CMD",
@@ -2532,6 +2543,14 @@ ${name}
                         }
                     }));
                 }
+
+                if (fsUploadTimeout) clearTimeout(fsUploadTimeout);
+                fsUploadTimeout = setTimeout(() => {
+                    const st = document.getElementById("fs-stats-info");
+                    if (st && st.innerText.includes("Mengunggah")) {
+                        st.innerHTML = `<span style="color: #d29922; background: rgba(210,153,34,0.15); padding: 4px 10px; border-radius: 6px;">⚠️ Unggahan belum direspons VPS. Jika file besar (>1MB), gunakan perintah curl instan lewat Shell.</span>`;
+                    }
+                }, 35000);
             };
             reader.readAsDataURL(file);
             event.target.value = "";
