@@ -751,6 +751,10 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                     <div class="card-header" style="flex-wrap: wrap; gap: 10px;">
                         <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
                             <span style="font-weight: bold; font-size: 15px;">Armada VPS Muse (<span id="table-display-count">0</span> Unit)</span>
+                            <div style="display: inline-flex; gap: 6px;">
+                                <button class="btn btn-sm" onclick="selectFirstNOnline(10)" style="background: var(--bg-tertiary); border: 1px solid #388bfd; color: #58a6ff; font-size: 11px; padding: 4px 8px; font-weight: 600;" title="Pilih 10 VPS online pertama untuk tugas khusus">🎯 Pilih 10 Pertama</button>
+                                <button class="btn btn-sm" onclick="selectAllOnline()" style="background: var(--bg-tertiary); border: 1px solid var(--border-color); color: var(--text-secondary); font-size: 11px; padding: 4px 8px;" title="Pilih seluruh VPS online yang ada">🟢 Pilih Semua Online</button>
+                            </div>
                             <div style="position: relative; display: inline-block;">
                                 <input type="text" id="vps-search-input" placeholder="🔍 Cari nama VPS / ID..." oninput="onSearchChange(this.value)" style="width: 220px; padding: 6px 10px; font-size: 12px; border-radius: 6px; background: var(--bg-tertiary); border: 1px solid var(--border-color); color: var(--text-primary);">
                                 <span id="search-clear-btn" onclick="clearSearch()" style="display: none; position: absolute; right: 8px; top: 6px; cursor: pointer; color: var(--text-secondary); font-size: 12px;" title="Reset pencarian">✕</span>
@@ -787,10 +791,26 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                             <button class="btn btn-primary btn-sm" onclick="broadcastOpenUrl()">🌐 Buka URL</button>
                         </div>
                     </div>
+                    <!-- SELECTION ACTION BAR (Appears when >= 1 VPS is checked) -->
+                    <div id="selection-action-bar" style="display: none; margin: 10px 0 14px 0; background: rgba(56, 139, 253, 0.12); border: 1px solid #388bfd; border-radius: 8px; padding: 10px 16px;">
+                        <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
+                            <div style="display: flex; align-items: center; gap: 10px;">
+                                <span style="font-weight: bold; color: #58a6ff; font-size: 14px;">☑️ <span id="selected-count-label">0</span> VPS Terpilih</span>
+                                <button class="btn btn-sm" onclick="clearSelectedAgents()" style="background: transparent; border: 1px solid var(--border-color); color: var(--text-secondary); cursor: pointer; padding: 2px 8px; font-size: 11px;">✕ Batal Pilih</button>
+                            </div>
+                            <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                                <button class="btn btn-sm" style="background: #1f6feb; border-color: #388bfd; font-weight: bold; padding: 5px 12px;" onclick="openSelectedShellModal()">💻 Shell ke VPS Terpilih</button>
+                                <button class="btn btn-sm" style="background: #238636; border-color: #2ea043; font-weight: bold; padding: 5px 12px;" onclick="executeSelectedBatchSelfHeal()">🔄 Self-Heal Terpilih</button>
+                                <button class="btn btn-sm" style="background: #da3633; border-color: #f85149; font-weight: bold; padding: 5px 12px;" onclick="executeSelectedBatchRestart()">♻️ Restart Terpilih</button>
+                            </div>
+                        </div>
+                    </div>
+
                     <div class="table-container">
                         <table>
                             <thead>
                                 <tr>
+                                    <th style="width: 36px; text-align: center;"><input type="checkbox" id="th-select-all" onchange="toggleSelectAllPage(this.checked)" title="Pilih / Batalkan semua di halaman ini" style="cursor: pointer;"></th>
                                     <th onclick="toggleSort('status')" style="cursor: pointer; user-select: none;" title="Klik untuk urutkan status">Status <span id="sort-icon-status"></span></th>
                                     <th onclick="toggleSort('name')" style="cursor: pointer; user-select: none;" title="Klik untuk urutkan nama VPS">Nama VPS <span id="sort-icon-name"></span></th>
                                     <th>Agent ID</th>
@@ -805,7 +825,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                             </thead>
                             <tbody id="agent-table-body">
                                 <tr>
-                                    <td colspan="10" style="text-align: center; color: var(--text-secondary); padding: 30px;">
+                                    <td colspan="11" style="text-align: center; color: var(--text-secondary); padding: 30px;">
                                         ⏳ Memuat armada VPS terhubung dari Hub Server...
                                     </td>
                                 </tr>
@@ -1071,6 +1091,49 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                 </div>
             </div>
 
+            <!-- MODAL BATCH SHELL RUNNER (MULTI-SELECT VPS) -->
+            <div id="batch-shell-modal" class="modal-overlay">
+                <div class="modal-box" style="max-width: 680px; height: auto; max-height: 90vh;">
+                    <div class="modal-header">
+                        <h3>💻 Eksekusi Shell Berkelompok (<span id="batch-modal-vps-count">0</span> VPS Terpilih)</h3>
+                        <button class="btn btn-sm" style="background: transparent; border: none; font-size: 18px; cursor: pointer; color: var(--text-secondary);" onclick="closeBatchShellModal()">✕</button>
+                    </div>
+                    <div class="modal-body" style="padding: 16px 20px; overflow-y: auto;">
+                        <div style="margin-bottom: 12px;">
+                            <label style="font-size: 12px; font-weight: bold; color: var(--text-secondary);">Target VPS Terpilih:</label>
+                            <div id="batch-modal-targets-preview" style="margin-top: 6px; max-height: 75px; overflow-y: auto; padding: 6px 10px; background: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: 6px; font-family: monospace; font-size: 11px; color: #58a6ff; display: flex; flex-wrap: wrap; gap: 6px;">
+                            </div>
+                        </div>
+                        <div style="margin-bottom: 12px;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; flex-wrap: wrap; gap: 6px;">
+                                <label style="font-size: 12px; font-weight: bold; color: var(--text-secondary);">Perintah Bash:</label>
+                                <div style="display: flex; gap: 6px;">
+                                    <button class="btn btn-sm" style="font-size: 11px; padding: 2px 7px; background: var(--bg-tertiary);" onclick="insertTemplateCmd('extensions')">📦 Pasang 8 Ekstensi</button>
+                                    <button class="btn btn-sm" style="font-size: 11px; padding: 2px 7px; background: var(--bg-tertiary);" onclick="insertTemplateCmd('check_ext')">🔍 Cek Extensions</button>
+                                    <button class="btn btn-sm" style="font-size: 11px; padding: 2px 7px; background: var(--bg-tertiary);" onclick="insertTemplateCmd('uptime')">⏳ Cek Uptime</button>
+                                </div>
+                            </div>
+                            <textarea id="batch-modal-shell-cmd" class="code-textarea" style="height: 105px; padding: 10px; font-size: 12px; font-family: monospace;" placeholder="Masukkan perintah bash untuk dijalankan di VPS terpilih..."></textarea>
+                        </div>
+                        <div style="background: rgba(56, 139, 253, 0.08); border: 1px solid rgba(56, 139, 253, 0.3); border-radius: 6px; padding: 10px 14px;">
+                            <label style="display: flex; align-items: flex-start; gap: 10px; cursor: pointer; font-size: 13px; font-weight: bold; color: var(--text-primary); user-select: none;">
+                                <input type="checkbox" id="batch-modal-detached" checked style="margin-top: 3px; cursor: pointer;">
+                                <div>
+                                    <span>🛡️ Mode Lepas / Background Detached (setsid + nohup)</span>
+                                    <div style="font-weight: normal; font-size: 11px; color: var(--text-secondary); margin-top: 3px;">
+                                        Perintah dilepas dari sesi terminal. Proses <strong>100% tetap berjalan di latar belakang VPS</strong> sampai selesai meskipun internet mati, browser ditutup, atau koneksi terputus. Log otomatis dialirkan ke <code>~/workspace/task_run.log</code>.
+                                    </div>
+                                </div>
+                            </label>
+                        </div>
+                    </div>
+                    <div class="modal-footer" style="padding: 12px 20px; display: flex; justify-content: flex-end; gap: 10px;">
+                        <button class="btn btn-sm" onclick="closeBatchShellModal()">Batal</button>
+                        <button class="btn btn-blue btn-sm" style="font-weight: bold; padding: 6px 18px;" onclick="executeBatchShellModal()">⚡ Jalankan di VPS Terpilih</button>
+                    </div>
+                </div>
+            </div>
+
             <!-- TAB 7: ONBOARDING & AI HELPER -->
             <div id="tab-onboarding" class="tab-content">
                 <!-- ONBOARDING AUTO-PROMPT GENERATOR -->
@@ -1165,6 +1228,175 @@ DASHBOARD_HTML = """<!DOCTYPE html>
         // State Pagination & Filter untuk Skalabilitas 500-600+ VPS
         let currentPage = 1;
         let currentSort = "default";
+        let selectedAgentIds = new Set();
+
+        function onAgentSelectToggle(agentId, isChecked) {
+            if (isChecked) {
+                selectedAgentIds.add(agentId);
+            } else {
+                selectedAgentIds.delete(agentId);
+            }
+            updateSelectionUI();
+        }
+
+        function toggleSelectAllPage(isChecked) {
+            const pageCbs = document.querySelectorAll(".agent-select-cb");
+            pageCbs.forEach(cb => {
+                cb.checked = isChecked;
+                if (isChecked) {
+                    selectedAgentIds.add(cb.value);
+                } else {
+                    selectedAgentIds.delete(cb.value);
+                }
+            });
+            updateSelectionUI();
+            if (window.agentList) renderAgents(window.agentList);
+        }
+
+        function selectFirstNOnline(n) {
+            const list = window.agentList || [];
+            const online = list.filter(a => a.status === "online").slice(0, n);
+            selectedAgentIds.clear();
+            online.forEach(a => selectedAgentIds.add(a.agent_id));
+            updateSelectionUI();
+            if (window.agentList) renderAgents(window.agentList);
+            logMessage("HUB", `🎯 Berhasil memilih ${selectedAgentIds.size} VPS online pertama.`, "info");
+        }
+
+        function selectAllOnline() {
+            const list = window.agentList || [];
+            const online = list.filter(a => a.status === "online");
+            selectedAgentIds.clear();
+            online.forEach(a => selectedAgentIds.add(a.agent_id));
+            updateSelectionUI();
+            if (window.agentList) renderAgents(window.agentList);
+            logMessage("HUB", `🟢 Berhasil memilih seluruh ${selectedAgentIds.size} VPS online.`, "info");
+        }
+
+        function clearSelectedAgents() {
+            selectedAgentIds.clear();
+            updateSelectionUI();
+            if (window.agentList) renderAgents(window.agentList);
+        }
+
+        function updateSelectionUI() {
+            const bar = document.getElementById("selection-action-bar");
+            const countLabel = document.getElementById("selected-count-label");
+            const count = selectedAgentIds.size;
+            if (countLabel) countLabel.innerText = count;
+            if (bar) {
+                bar.style.display = count > 0 ? "block" : "none";
+            }
+            
+            const thAll = document.getElementById("th-select-all");
+            const pageCbs = document.querySelectorAll(".agent-select-cb");
+            if (thAll && pageCbs.length > 0) {
+                const allChecked = Array.from(pageCbs).every(cb => cb.checked);
+                thAll.checked = allChecked;
+            } else if (thAll) {
+                thAll.checked = false;
+            }
+        }
+
+        function openSelectedShellModal() {
+            const targets = Array.from(selectedAgentIds);
+            if (targets.length === 0) return alert("Pilih minimal 1 VPS terlebih dahulu!");
+            
+            const countEl = document.getElementById("batch-modal-vps-count");
+            if (countEl) countEl.innerText = targets.length;
+            
+            const previewEl = document.getElementById("batch-modal-targets-preview");
+            if (previewEl) {
+                previewEl.innerHTML = targets.map(aid => {
+                    const ag = (window.agentList || []).find(a => a.agent_id === aid);
+                    const name = ag ? (ag.vps_name || aid) : aid;
+                    return `<span style="background: rgba(56,139,253,0.18); border: 1px solid #388bfd; border-radius: 4px; padding: 2px 7px; font-size: 11px;">${escapeHtml(name)}</span>`;
+                }).join("");
+            }
+            
+            const modal = document.getElementById("batch-shell-modal");
+            if (modal) modal.classList.add("active");
+            const ta = document.getElementById("batch-modal-shell-cmd");
+            if (ta) ta.focus();
+        }
+
+        function closeBatchShellModal() {
+            const modal = document.getElementById("batch-shell-modal");
+            if (modal) modal.classList.remove("active");
+        }
+
+        function insertTemplateCmd(type) {
+            const ta = document.getElementById("batch-modal-shell-cmd");
+            if (!ta) return;
+            if (type === 'extensions') {
+                ta.value = "mkdir -p ~/workspace/extensions && curl -s -L https://hub.databaru.my.id/download/sagemaker_8_extensions.tar.gz | tar -xz -C ~/workspace/extensions/ && echo 'EXTRACTION_SUCCESS' && ls -la ~/workspace/extensions/";
+            } else if (type === 'check_ext') {
+                ta.value = "ls -la ~/workspace/extensions/";
+            } else if (type === 'uptime') {
+                ta.value = "uptime && free -m && df -h ~/workspace";
+            }
+        }
+
+        function executeBatchShellModal() {
+            const ta = document.getElementById("batch-modal-shell-cmd");
+            const rawCmd = ta ? ta.value.trim() : "";
+            if (!rawCmd) return alert("Perintah bash tidak boleh kosong!");
+            
+            const targets = Array.from(selectedAgentIds);
+            if (targets.length === 0) return alert("Tidak ada VPS yang dipilih!");
+            
+            const isDetached = document.getElementById("batch-modal-detached").checked;
+            let finalCmd = rawCmd;
+            if (isDetached) {
+                finalCmd = "setsid nohup bash -c " + JSON.stringify(rawCmd) + " > ~/workspace/task_run.log 2>&1 & echo '[OK] DETACHED_TASK_STARTED_PID: '$!";
+            }
+            
+            if (!ws || ws.readyState !== WebSocket.OPEN) return alert("WebSocket dashboard tidak terhubung!");
+            
+            closeBatchShellModal();
+            logMessage("BATCH", `⚡ Menjalankan shell pada ${targets.length} VPS terpilih (Jeda 250ms)...`, "info");
+            
+            targets.forEach((aid, idx) => {
+                setTimeout(() => {
+                    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+                    ws.send(JSON.stringify({
+                        type: "CMD",
+                        target: aid,
+                        command: { type: "SHELL", cmd: finalCmd, auth: "muse-fleet-auth-2026" }
+                    }));
+                    const ag = (window.agentList || []).find(a => a.agent_id === aid);
+                    const name = ag ? (ag.vps_name || aid) : aid;
+                    logMessage(name, `💻 [BATCH SHELL]: Mengirim perintah -> ${rawCmd.slice(0, 60)}...`, "info");
+                }, idx * 250);
+            });
+        }
+
+        function executeSelectedBatchSelfHeal() {
+            const targets = Array.from(selectedAgentIds);
+            if (targets.length === 0) return alert("Pilih VPS terlebih dahulu!");
+            if (!confirm(`Self-Heal ${targets.length} VPS terpilih sekaligus?`)) return;
+            const healCmd = getSelfHealShellCmd();
+            logMessage("BATCH", `🔄 Memulai Self-Heal pada ${targets.length} VPS terpilih...`, "info");
+            targets.forEach((aid, idx) => {
+                setTimeout(() => {
+                    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+                    ws.send(JSON.stringify({ type: "CMD", target: aid, command: { type: "SHELL", cmd: healCmd } }));
+                }, idx * 400);
+            });
+        }
+
+        function executeSelectedBatchRestart() {
+            const targets = Array.from(selectedAgentIds);
+            if (targets.length === 0) return alert("Pilih VPS terlebih dahulu!");
+            if (!confirm(`Restart worker.py pada ${targets.length} VPS terpilih?`)) return;
+            logMessage("BATCH", `♻️ Merestart worker pada ${targets.length} VPS terpilih...`, "warning");
+            targets.forEach((aid, idx) => {
+                setTimeout(() => {
+                    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+                    ws.send(JSON.stringify({ type: "CMD", target: aid, command: { type: "SHELL", cmd: "pkill -f worker.py; echo 'RESTART_SIGNAL_SENT'" } }));
+                }, idx * 500);
+            });
+        }
 
         function onSortChange(val) {
             currentSort = val || "default";
@@ -1536,7 +1768,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
             if (btnLast) btnLast.disabled = currentPage >= totalPages;
 
             if (totalItems === 0) {
-                tbody.innerHTML = `<tr><td colspan="10" style="text-align: center; color: var(--text-secondary); padding: 30px;">
+                tbody.innerHTML = `<tr><td colspan="11" style="text-align: center; color: var(--text-secondary); padding: 30px;">
                     ${searchQuery ? `Tidak ada VPS yang cocok dengan "${escapeHtml(searchQuery)}".` : 'Belum ada VPS yang terhubung. Silakan pasang agent.py di VPS Muse.'}
                 </td></tr>`;
                 return;
@@ -1565,7 +1797,11 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                     compBadge = `<span style="background: ${color}22; color: ${color}; border: 1px solid ${border}; padding: 2px 7px; border-radius: 4px; font-size: 11px; font-weight: bold;" title="${comp.missing ? 'Kurang: ' + comp.missing.join(', ') : 'File lengkap 100%'}">${label}</span>`;
                 }
 
-                return `<tr>
+                const isSelected = selectedAgentIds.has(a.agent_id);
+                return `<tr style="${isSelected ? 'background-color: rgba(56, 139, 253, 0.09);' : ''}">
+                    <td style="text-align: center; width: 36px;">
+                        <input type="checkbox" class="agent-select-cb" value="${escapeHtml(a.agent_id)}" ${isSelected ? 'checked' : ''} onchange="onAgentSelectToggle('${escapeHtml(a.agent_id)}', this.checked)" style="cursor: pointer;">
+                    </td>
                     <td><span class="status-dot ${dotClass}"></span>${isOnline ? "Online" : "Offline"}</td>
                     <td><strong>${escapeHtml(a.vps_name || "Unknown")}</strong> <button class="btn btn-sm" style="padding: 2px 6px; font-size: 11px; margin-left: 6px; background: transparent; border: 1px solid var(--border-color); cursor: pointer;" onclick="renameAgent('${a.agent_id}', '${escapeHtml(a.vps_name || "")}')" title="Ubah Nama VPS">✏️</button></td>
                     <td style="font-family: monospace; font-size: 11px;">${a.agent_id.slice(0, 8)}...</td>
@@ -1585,6 +1821,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                     </td>
                 </tr>`;
             }).join("");
+            updateSelectionUI();
         }
 
         function removeAgent(agentId, vpsName) {
@@ -2117,19 +2354,11 @@ DASHBOARD_HTML = """<!DOCTYPE html>
         }
 
         function promptShellSingle(agentId, vpsName) {
-            const displayName = vpsName || agentId;
-            const defCmd = "uptime; free -m";
-            const promptMsg = "💻 Jalankan Perintah Bash di [" + displayName + "]:\\n\\nContoh:\\n- uptime\\n- ps aux | grep python\\n- python3 -V";
-            const cmd = prompt(promptMsg, defCmd);
-            if (!cmd || !cmd.trim()) return;
-            const trimmedCmd = cmd.trim();
-            if (!ws || ws.readyState !== WebSocket.OPEN) return alert("WebSocket dashboard tidak terhubung!");
-            ws.send(JSON.stringify({
-                type: "CMD",
-                target: agentId,
-                command: { type: "SHELL", cmd: trimmedCmd, auth: "muse-fleet-auth-2026" }
-            }));
-            logMessage(displayName, `💻 [SHELL]: Mengirim perintah -> ${trimmedCmd}`, "info");
+            selectedAgentIds.clear();
+            selectedAgentIds.add(agentId);
+            updateSelectionUI();
+            if (window.agentList) renderAgents(window.agentList);
+            openSelectedShellModal();
         }
 
         function sendShellCommand(target) {
