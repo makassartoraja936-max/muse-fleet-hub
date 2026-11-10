@@ -4155,6 +4155,35 @@ async def api_agents_handler(request):
         return web.json_response({"error": "Unauthorized"}, status=401)
     return web.json_response({"agents": registry.get_public_list()})
 
+async def api_cmd_handler(request):
+    token = request.cookies.get(SESSION_COOKIE_NAME) or request.query.get("token") or request.query.get("auth") or request.headers.get("Authorization")
+    if not verify_session_token(token):
+        return web.json_response({"error": "Unauthorized"}, status=401)
+    try:
+        data = await request.json()
+    except Exception:
+        return web.json_response({"error": "Invalid JSON"}, status=400)
+    target = data.get("target")
+    cmd = data.get("command")
+    if not target or not cmd:
+        return web.json_response({"error": "Missing target or command"}, status=400)
+    await dispatch_command(target, cmd)
+    return web.json_response({"status": "dispatched", "target": target})
+
+async def api_agent_detail_handler(request):
+    token = request.cookies.get(SESSION_COOKIE_NAME) or request.query.get("token") or request.query.get("auth") or request.headers.get("Authorization")
+    if not verify_session_token(token):
+        return web.json_response({"error": "Unauthorized"}, status=401)
+    aid = request.match_info.get("agent_id")
+    agent = registry.agents.get(aid)
+    if not agent:
+        return web.json_response({"error": "Agent not found"}, status=404)
+    agent_logs = [l for l in registry.logs if l.get("agent_id") == aid][-30:]
+    return web.json_response({
+        "agent": {k: v for k, v in agent.items() if k != "ws"},
+        "logs": agent_logs
+    })
+
 async def dashboard_ws_handler(request):
     cookie = request.cookies.get(SESSION_COOKIE_NAME) or request.query.get("token") or request.query.get("auth")
     if not verify_session_token(cookie):
@@ -4386,6 +4415,8 @@ async def main():
     app.router.add_get("/agent", agent_ws_handler)
     app.router.add_get("/ws", dashboard_ws_handler)
     app.router.add_get("/api/agents", api_agents_handler)
+    app.router.add_post("/api/cmd", api_cmd_handler)
+    app.router.add_get("/api/agent/{agent_id}", api_agent_detail_handler)
     app.router.add_get("/download/{filename}", handle_download_http)
     runner = web.AppRunner(app)
     await runner.setup()
