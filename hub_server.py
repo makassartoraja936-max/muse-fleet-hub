@@ -3862,7 +3862,7 @@ async def logout_handler(request):
 async def unified_root_handler(request):
     """Unified handler: upgrades to WebSocket for agents if requested, or serves Dashboard HTML."""
     if request.headers.get("Upgrade", "").lower() == "websocket":
-        ws = web.WebSocketResponse(heartbeat=20.0, max_msg_size=50 * 1024 * 1024)
+        ws = web.WebSocketResponse(heartbeat=60.0, max_msg_size=50 * 1024 * 1024)
         await ws.prepare(request)
         adapter = AioHttpWsAdapter(ws)
         try:
@@ -3879,7 +3879,7 @@ async def unified_root_handler(request):
 
 async def agent_ws_handler(request):
     """Direct agent WebSocket endpoint at /agent."""
-    ws = web.WebSocketResponse(heartbeat=20.0, max_msg_size=50 * 1024 * 1024)
+    ws = web.WebSocketResponse(heartbeat=60.0, max_msg_size=50 * 1024 * 1024)
     await ws.prepare(request)
     adapter = AioHttpWsAdapter(ws)
     try:
@@ -4254,7 +4254,7 @@ async def dashboard_ws_handler(request):
     if not verify_session_token(cookie):
         return web.HTTPUnauthorized(text="Unauthorized WebSocket access. Please login first.")
 
-    ws = web.WebSocketResponse(heartbeat=20.0, max_msg_size=50 * 1024 * 1024)
+    ws = web.WebSocketResponse(heartbeat=60.0, max_msg_size=50 * 1024 * 1024)
     await ws.prepare(request)
 
     registry.dashboard_websockets.add(ws)
