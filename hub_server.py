@@ -3922,6 +3922,12 @@ async def handle_agent_connection(websocket):
             
             # Jika worker ID spesifik (bukan default htch-runtime) atau token sama, ini adalah reconnect dari VPS yang sama!
             if raw_agent_id != "worker-htch-runtime" or (old_auth and new_auth and old_auth == new_auth):
+                last_seen = registry.agents[assigned_id].get("last_seen", 0)
+                is_active = (time.time() - last_seen < 12.0)
+                if is_active:
+                    logger.warning(f"Menolak koneksi duplikat untuk agen yang sedang aktif berjalan: {assigned_id}")
+                    await websocket.close(code=1008, reason="Agent already connected and active")
+                    return
                 logger.info(f"Menggantikan koneksi lama untuk agen reconnecting: {assigned_id}")
                 old_ws = registry.agents[assigned_id].get("ws")
                 if old_ws:
