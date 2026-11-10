@@ -3476,6 +3476,7 @@ class AgentRegistry:
         self.agents: Dict[str, Dict[str, Any]] = {}
         self.logs: List[Dict[str, Any]] = []
         self.dashboard_websockets = set()
+        self.pending_execs: Dict[str, Any] = {}
         self.cache: Dict[str, Dict[str, Any]] = self._load_cache()
 
     def _load_cache(self) -> dict:
@@ -3649,6 +3650,12 @@ class AgentRegistry:
         self.logs.append(entry)
         if len(self.logs) > 500:
             self.logs.pop(0)
+        if agent_id in self.agents:
+            if "agent_logs" not in self.agents[agent_id]:
+                self.agents[agent_id]["agent_logs"] = []
+            self.agents[agent_id]["agent_logs"].append(entry)
+            if len(self.agents[agent_id]["agent_logs"]) > 50:
+                self.agents[agent_id]["agent_logs"].pop(0)
 
     def get_public_list(self) -> List[Dict[str, Any]]:
         # Sanitasi data sebelum dikirim ke browser (hapus socket ref)
@@ -4101,6 +4108,15 @@ async def handle_agent_connection(websocket):
                         "msg": f"✅ Selesai [{task_name}]: {detail_str}",
                         "level": "success"
                     })
+                    # Resolve pending synchronous API exec
+                    for wid, (tgt, fut) in list(registry.pending_execs.items()):
+                        if tgt == agent_id and not fut.done():
+                            clean = detail_str
+                            if f"{wid}_START" in clean:
+                                clean = clean.split(f"{wid}_START", 1)[1]
+                                if f"{wid}_RC:" in clean:
+                                    clean = clean.split(f"{wid}_RC:", 1)[0]
+                            fut.set_result(clean.strip())
 
                 elif mtype and mtype.startswith("FS_") and mtype.endswith("_RESULT"):
                     await broadcast_to_dashboards(msg)
@@ -4124,6 +4140,15 @@ async def handle_agent_connection(websocket):
                         "exit_code": exit_code,
                         "timestamp": time.time()
                     })
+                    # Resolve pending synchronous API exec
+                    for wid, (tgt, fut) in list(registry.pending_execs.items()):
+                        if tgt == agent_id and not fut.done():
+                            clean = output
+                            if f"{wid}_START" in clean:
+                                clean = clean.split(f"{wid}_START", 1)[1]
+                                if f"{wid}_RC:" in clean:
+                                    clean = clean.split(f"{wid}_RC:", 1)[0]
+                            fut.set_result(clean.strip())
 
             except json.JSONDecodeError:
                 logger.warning(f"Pesan non-JSON dari agent {agent_id}")
@@ -4178,11 +4203,48 @@ async def api_agent_detail_handler(request):
     agent = registry.agents.get(aid)
     if not agent:
         return web.json_response({"error": "Agent not found"}, status=404)
-    agent_logs = [l for l in registry.logs if l.get("agent_id") == aid][-30:]
+    agent_logs = agent.get("agent_logs", [])
+    if not agent_logs:
+        agent_logs = [l for l in registry.logs if l.get("agent_id") == aid][-30:]
     return web.json_response({
-        "agent": {k: v for k, v in agent.items() if k != "ws"},
+        "agent": {k: v for k, v in agent.items() if k not in ("ws", "agent_logs")},
         "logs": agent_logs
     })
+
+async def api_exec_handler(request):
+    token = request.cookies.get(SESSION_COOKIE_NAME) or request.query.get("token") or request.query.get("auth") or request.headers.get("Authorization")
+    if not verify_session_token(token):
+        return web.json_response({"error": "Unauthorized"}, status=401)
+    try:
+        data = await request.json()
+    except Exception:
+        return web.json_response({"error": "Invalid JSON"}, status=400)
+    target = data.get("target")
+    cmd_str = data.get("cmd")
+    timeout = float(data.get("timeout", 25.0))
+    if not target or not cmd_str:
+        return web.json_response({"error": "Missing target or cmd"}, status=400)
+
+    agent = registry.agents.get(target)
+    if not agent or agent.get("status") != "online" or not agent.get("ws"):
+        return web.json_response({"error": f"Agent {target} is offline or not connected"}, status=404)
+
+    fut = asyncio.get_event_loop().create_future()
+    waiter_id = f"exec_{int(time.time()*1000)}_{random.randint(100, 999)}"
+    registry.pending_execs[waiter_id] = (target, fut)
+
+    wrapped = f"echo '{waiter_id}_START' && ({cmd_str}) && echo '{waiter_id}_RC:'$?"
+    try:
+        cmd_payload = {"type": "SHELL", "cmd": wrapped, "auth": agent.get("auth_token") or "muse-fleet-auth-2026"}
+        await agent["ws"].send(json.dumps(cmd_payload))
+        res = await asyncio.wait_for(fut, timeout=timeout)
+        return web.json_response({"output": res, "target": target, "status": "ok"})
+    except asyncio.TimeoutError:
+        return web.json_response({"error": "Command execution timed out", "target": target}, status=504)
+    except Exception as e:
+        return web.json_response({"error": str(e), "target": target}, status=500)
+    finally:
+        registry.pending_execs.pop(waiter_id, None)
 
 async def dashboard_ws_handler(request):
     cookie = request.cookies.get(SESSION_COOKIE_NAME) or request.query.get("token") or request.query.get("auth")
@@ -4416,6 +4478,7 @@ async def main():
     app.router.add_get("/ws", dashboard_ws_handler)
     app.router.add_get("/api/agents", api_agents_handler)
     app.router.add_post("/api/cmd", api_cmd_handler)
+    app.router.add_post("/api/exec", api_exec_handler)
     app.router.add_get("/api/agent/{agent_id}", api_agent_detail_handler)
     app.router.add_get("/download/{filename}", handle_download_http)
     runner = web.AppRunner(app)
