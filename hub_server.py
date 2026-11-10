@@ -1130,7 +1130,13 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                         <span style="font-size: 11px; color: var(--text-secondary);">Kirim ke satu node, satu kelompok, atau seluruh armada</span>
                     </div>
                     <div class="form-group" style="margin-bottom: 12px;">
-                        <label style="font-size: 12px; font-weight: bold; color: var(--text-secondary);">Pilih Target VPS / Kelompok:</label>
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; flex-wrap: wrap; gap: 6px;">
+                            <label style="font-size: 12px; font-weight: bold; color: var(--text-secondary);">Pilih Target VPS / Kelompok:</label>
+                            <div style="display: flex; align-items: center; gap: 4px;">
+                                <input type="text" id="search-shell-select" placeholder="🔍 Cari VPS / Kelompok..." oninput="filterSelectOptions('shell-agent-select', this.value)" style="width: 200px; padding: 4px 10px; font-size: 12px; background: var(--bg-tertiary); border: 1px solid var(--border-color); color: var(--text-primary); border-radius: 6px; outline: none;">
+                                <button type="button" class="btn btn-sm" onclick="clearSelectSearch('shell-agent-select', 'search-shell-select')" style="padding: 2px 7px; font-size: 11px; background: var(--bg-tertiary); border: 1px solid var(--border-color);" title="Reset pencarian">✕</button>
+                            </div>
+                        </div>
                         <select id="shell-agent-select" style="width: 100%; padding: 8px 12px; background: var(--bg-tertiary); border: 1px solid var(--border-color); color: var(--text-primary); border-radius: 6px; font-weight: 600;">
                             <option value="ALL">⚡ SEMUA VPS (Broadcast ke Seluruh Armada)</option>
                         </select>
@@ -1161,7 +1167,11 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                             <span style="font-weight: bold; font-family: monospace; font-size: 14px; color: #58a6ff;">🖥️ Live Terminal Console</span>
                             <span id="terminal-vps-indicator" style="font-size: 11px; background: var(--bg-tertiary); border: 1px solid var(--border-color); padding: 2px 8px; border-radius: 4px; color: #7ee787;">● Mendengarkan Output</span>
                         </div>
-                        <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+                        <div style="display: flex; gap: 6px; align-items: center; flex-wrap: wrap;">
+                            <div style="display: flex; align-items: center; gap: 4px;">
+                                <input type="text" id="search-term-filter" placeholder="🔍 Filter node..." oninput="filterSelectOptions('terminal-node-filter', this.value, true)" style="width: 125px; padding: 3px 8px; font-size: 12px; background: var(--bg-tertiary); border: 1px solid var(--border-color); color: var(--text-primary); border-radius: 6px; outline: none;">
+                                <button type="button" class="btn btn-sm" onclick="clearSelectSearch('terminal-node-filter', 'search-term-filter', true)" style="padding: 2px 6px; font-size: 11px; background: var(--bg-tertiary); border: 1px solid var(--border-color);" title="Reset filter">✕</button>
+                            </div>
                             <select id="terminal-node-filter" onchange="filterTerminalNode(this.value)" style="padding: 4px 8px; font-size: 12px; background: var(--bg-tertiary); border: 1px solid var(--border-color); color: var(--text-primary); border-radius: 6px;">
                                 <option value="ALL">📺 Tampilkan Semua Node</option>
                             </select>
@@ -1206,9 +1216,13 @@ DASHBOARD_HTML = """<!DOCTYPE html>
             <!-- TAB 5: LIVE SCREEN VIEWER -->
             <div id="tab-screen" class="tab-content">
                 <div class="card">
-                    <div class="card-header">
+                    <div class="card-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
                         <span>📸 Live Screen Viewer (Tampilan Nyata Browser Xvfb :99 di VPS)</span>
-                        <div class="btn-group">
+                        <div class="btn-group" style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+                            <div style="display: flex; align-items: center; gap: 4px;">
+                                <input type="text" id="search-screen-select" placeholder="🔍 Cari VPS..." oninput="filterSelectOptions('screen-agent-select', this.value)" style="width: 130px; padding: 5px 8px; font-size: 12px; background: var(--bg-tertiary); border: 1px solid var(--border-color); color: var(--text-primary); border-radius: 6px; outline: none;">
+                                <button type="button" class="btn btn-sm" onclick="clearSelectSearch('screen-agent-select', 'search-screen-select')" style="padding: 4px 7px; font-size: 11px; background: var(--bg-tertiary); border: 1px solid var(--border-color);" title="Reset pencarian">✕</button>
+                            </div>
                             <select id="screen-agent-select" style="padding: 6px 12px; background: var(--bg-tertiary); border: 1px solid var(--border-color); color: var(--text-primary); border-radius: 6px;">
                                 <option value="all">Pilih VPS...</option>
                             </select>
@@ -1239,9 +1253,13 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                 <div class="card" style="display: flex; flex-direction: column; gap: 14px;">
                     <!-- Top VPS & Toolbar Header -->
                     <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; padding-bottom: 12px; border-bottom: 1px solid var(--border-color);">
-                        <div style="display: flex; align-items: center; gap: 10px;">
+                        <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
                             <span style="font-weight: 600; font-size: 15px;">📁 Remote SFTP File Manager</span>
                             <span style="color: var(--text-secondary); font-size: 13px;">| VPS:</span>
+                            <div style="display: flex; align-items: center; gap: 4px;">
+                                <input type="text" id="search-fs-select" placeholder="🔍 Cari VPS..." oninput="filterSelectOptions('fs-agent-select', this.value)" style="width: 130px; padding: 5px 8px; font-size: 12px; background: var(--bg-tertiary); border: 1px solid var(--border-color); color: var(--text-primary); border-radius: 6px; outline: none;">
+                                <button type="button" class="btn btn-sm" onclick="clearSelectSearch('fs-agent-select', 'search-fs-select')" style="padding: 4px 7px; font-size: 11px; background: var(--bg-tertiary); border: 1px solid var(--border-color);" title="Reset pencarian">✕</button>
+                            </div>
                             <select id="fs-agent-select" onchange="onFsAgentChange()" style="padding: 6px 12px; background: var(--bg-tertiary); border: 1px solid var(--border-color); color: var(--text-primary); border-radius: 6px; font-weight: 600;">
                                 <option value="">Pilih VPS Target...</option>
                             </select>
@@ -2096,6 +2114,72 @@ DASHBOARD_HTML = """<!DOCTYPE html>
             }
         }
 
+        // Global master options cache for searchable dropdowns
+        const selectMasterOptions = {};
+
+        function filterSelectOptions(selectId, query, triggerTerminalFilter = false) {
+            const sel = document.getElementById(selectId);
+            if (!sel) return;
+            const q = (query || "").trim().toLowerCase();
+
+            // Cache full options if not already cached
+            if (!selectMasterOptions[selectId] || selectMasterOptions[selectId].length <= 1) {
+                selectMasterOptions[selectId] = Array.from(sel.options).map(o => ({
+                    value: o.value,
+                    text: o.text
+                }));
+            }
+
+            const master = selectMasterOptions[selectId];
+            if (!master || master.length === 0) return;
+
+            const curVal = sel.value;
+            let filtered;
+            if (!q) {
+                filtered = master;
+            } else {
+                filtered = master.filter(o => {
+                    const t = o.text.toLowerCase();
+                    const v = o.value.toLowerCase();
+                    return t.includes(q) || v.includes(q);
+                });
+            }
+
+            sel.innerHTML = "";
+            if (filtered.length === 0) {
+                const noOpt = document.createElement("option");
+                noOpt.value = "";
+                noOpt.text = "⚠️ Tidak ditemukan";
+                sel.appendChild(noOpt);
+                return;
+            }
+
+            filtered.forEach(o => {
+                const opt = document.createElement("option");
+                opt.value = o.value;
+                opt.text = o.text;
+                sel.appendChild(opt);
+            });
+
+            // Restore selection or pick first match
+            if (filtered.some(o => o.value === curVal)) {
+                sel.value = curVal;
+            } else if (filtered.length > 0) {
+                sel.value = filtered[0].value;
+                if (triggerTerminalFilter && typeof filterTerminalNode === "function") {
+                    filterTerminalNode(sel.value);
+                } else if (sel.onchange) {
+                    sel.onchange();
+                }
+            }
+        }
+
+        function clearSelectSearch(selectId, inputId, triggerTerminalFilter = false) {
+            const inp = document.getElementById(inputId);
+            if (inp) inp.value = "";
+            filterSelectOptions(selectId, "", triggerTerminalFilter);
+        }
+
         let screenRefreshInterval = null;
 
         function requestScreenshot() {
@@ -2159,6 +2243,9 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                             currentFsAgent = agentList[0].agent_id;
                         }
                     }
+                    selectMasterOptions["fs-agent-select"] = Array.from(fsSel.options).map(o => ({ value: o.value, text: o.text }));
+                    const fsInp = document.getElementById("search-fs-select");
+                    if (fsInp && fsInp.value.trim()) filterSelectOptions("fs-agent-select", fsInp.value);
                 }
             } catch (e) {
                 console.warn("fs-agent-select error:", e);
@@ -2173,6 +2260,9 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                 } else if (agentList.length > 0) {
                     screenSel.value = agentList[0].agent_id;
                 }
+                selectMasterOptions["screen-agent-select"] = Array.from(screenSel.options).map(o => ({ value: o.value, text: o.text }));
+                const screenInp = document.getElementById("search-screen-select");
+                if (screenInp && screenInp.value.trim()) filterSelectOptions("screen-agent-select", screenInp.value);
             }
 
             try {
@@ -2196,6 +2286,9 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                     if ([...shellSel.options].some(o => o.value === curVal)) {
                         shellSel.value = curVal;
                     }
+                    selectMasterOptions["shell-agent-select"] = Array.from(shellSel.options).map(o => ({ value: o.value, text: o.text }));
+                    const shellInp = document.getElementById("search-shell-select");
+                    if (shellInp && shellInp.value.trim()) filterSelectOptions("shell-agent-select", shellInp.value);
                 }
             } catch (e) {
                 console.warn("shell-agent-select error:", e);
