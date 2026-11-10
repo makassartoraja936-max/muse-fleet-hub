@@ -4230,12 +4230,13 @@ async def api_exec_handler(request):
     if not agent or agent.get("status") != "online" or not agent.get("ws"):
         return web.json_response({"error": f"Agent {target} is offline or not connected"}, status=404)
 
-    fut = asyncio.get_event_loop().create_future()
-    waiter_id = f"exec_{int(time.time()*1000)}_{random.randint(100, 999)}"
-    registry.pending_execs[waiter_id] = (target, fut)
-
-    wrapped = f"echo '{waiter_id}_START' && ({cmd_str}) && echo '{waiter_id}_RC:'$?"
     try:
+        loop = asyncio.get_running_loop()
+        fut = loop.create_future()
+        waiter_id = f"exec_{int(time.time()*1000)}_{random.randint(100, 999)}"
+        registry.pending_execs[waiter_id] = (target, fut)
+
+        wrapped = f"echo '{waiter_id}_START' && ({cmd_str}) && echo '{waiter_id}_RC:'$?"
         cmd_payload = {"type": "SHELL", "cmd": wrapped, "auth": agent.get("auth_token") or "muse-fleet-auth-2026"}
         await agent["ws"].send(json.dumps(cmd_payload))
         res = await asyncio.wait_for(fut, timeout=timeout)
@@ -4243,6 +4244,7 @@ async def api_exec_handler(request):
     except asyncio.TimeoutError:
         return web.json_response({"error": "Command execution timed out", "target": target}, status=504)
     except Exception as e:
+        logger.error(f"Error in api_exec_handler: {e}", exc_info=True)
         return web.json_response({"error": str(e), "target": target}, status=500)
     finally:
         registry.pending_execs.pop(waiter_id, None)
