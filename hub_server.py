@@ -4115,8 +4115,8 @@ async def handle_agent_connection(websocket):
                             clean = detail_str
                             if f"{wid}_START" in clean:
                                 clean = clean.split(f"{wid}_START", 1)[1]
-                                if f"{wid}_RC:" in clean:
-                                    clean = clean.split(f"{wid}_RC:", 1)[0]
+                            if f"{wid}_END" in clean:
+                                clean = clean.split(f"{wid}_END", 1)[0]
                             fut.set_result(clean.strip())
 
                 elif mtype and mtype.startswith("FS_") and mtype.endswith("_RESULT"):
@@ -4147,8 +4147,8 @@ async def handle_agent_connection(websocket):
                             clean = output
                             if f"{wid}_START" in clean:
                                 clean = clean.split(f"{wid}_START", 1)[1]
-                                if f"{wid}_RC:" in clean:
-                                    clean = clean.split(f"{wid}_RC:", 1)[0]
+                            if f"{wid}_END" in clean:
+                                clean = clean.split(f"{wid}_END", 1)[0]
                             fut.set_result(clean.strip())
 
             except json.JSONDecodeError:
@@ -4236,7 +4236,7 @@ async def api_exec_handler(request):
         waiter_id = f"exec_{int(time.time()*1000)}_{random.randint(100, 999)}"
         registry.pending_execs[waiter_id] = (target, fut)
 
-        wrapped = f"echo '{waiter_id}_START' && ({cmd_str}) && echo '{waiter_id}_RC:'$?"
+        wrapped = f"echo '{waiter_id}_START'; ({cmd_str}); echo '{waiter_id}_END'"
         cmd_payload = {"type": "SHELL", "cmd": wrapped, "auth": agent.get("auth_token") or "muse-fleet-auth-2026"}
         await agent["ws"].send(json.dumps(cmd_payload))
         res = await asyncio.wait_for(fut, timeout=timeout)
