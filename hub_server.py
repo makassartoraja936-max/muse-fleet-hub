@@ -3744,16 +3744,21 @@ class AioHttpWsAdapter:
         return await self._ws.send_str(str(data))
 
     async def recv(self) -> str:
-        msg = await self._ws.receive()
-        if msg.type == web.WSMsgType.TEXT:
-            return msg.data
-        elif msg.type == web.WSMsgType.BINARY:
-            return msg.data.decode("utf-8", errors="replace")
-        elif msg.type in (web.WSMsgType.CLOSE, web.WSMsgType.CLOSED, web.WSMsgType.CLOSING):
-            raise websockets.exceptions.ConnectionClosed(None, None)
-        elif msg.type == web.WSMsgType.ERROR:
-            raise self._ws.exception() or websockets.exceptions.ConnectionClosed(None, None)
-        raise Exception(f"Unexpected WS message: {msg.type}")
+        while True:
+            msg = await self._ws.receive()
+            if msg.type == web.WSMsgType.TEXT:
+                return msg.data
+            elif msg.type == web.WSMsgType.BINARY:
+                return msg.data.decode("utf-8", errors="replace")
+            elif msg.type == web.WSMsgType.PING:
+                await self._ws.pong(msg.data)
+                continue
+            elif msg.type == web.WSMsgType.PONG:
+                continue
+            elif msg.type in (web.WSMsgType.CLOSE, web.WSMsgType.CLOSED, web.WSMsgType.CLOSING):
+                raise websockets.exceptions.ConnectionClosed(None, None)
+            elif msg.type == web.WSMsgType.ERROR:
+                raise self._ws.exception() or websockets.exceptions.ConnectionClosed(None, None)
 
     async def close(self, code: int = 1000, reason: str = ""):
         try:
@@ -3765,16 +3770,21 @@ class AioHttpWsAdapter:
         return self
 
     async def __anext__(self):
-        msg = await self._ws.receive()
-        if msg.type == web.WSMsgType.TEXT:
-            return msg.data
-        elif msg.type == web.WSMsgType.BINARY:
-            return msg.data.decode("utf-8", errors="replace")
-        elif msg.type in (web.WSMsgType.CLOSE, web.WSMsgType.CLOSED, web.WSMsgType.CLOSING):
-            raise StopAsyncIteration
-        elif msg.type == web.WSMsgType.ERROR:
-            raise StopAsyncIteration
-        return msg.data
+        while True:
+            msg = await self._ws.receive()
+            if msg.type == web.WSMsgType.TEXT:
+                return msg.data
+            elif msg.type == web.WSMsgType.BINARY:
+                return msg.data.decode("utf-8", errors="replace")
+            elif msg.type == web.WSMsgType.PING:
+                await self._ws.pong(msg.data)
+                continue
+            elif msg.type == web.WSMsgType.PONG:
+                continue
+            elif msg.type in (web.WSMsgType.CLOSE, web.WSMsgType.CLOSED, web.WSMsgType.CLOSING):
+                raise StopAsyncIteration
+            elif msg.type == web.WSMsgType.ERROR:
+                raise StopAsyncIteration
 
 
 async def health_check_handler(request):
