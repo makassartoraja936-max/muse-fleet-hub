@@ -3345,7 +3345,7 @@ ${name}
                     target: target,
                     command: {
                         type: "SHELL",
-                        cmd: "pkill -9 -f thorium || true; pkill -9 -f openbox || true; pkill -9 -f chrome || true; pkill -9 -f chromium || true; pkill -9 -f 'Xvfb :99' || true; rm -f /tmp/.X99-lock /tmp/.X11-unix/X99 ~/workspace/last_screenshot.png ~/workspace/browser_status.json ~/workspace/autostart_url.txt; echo 'BROWSER_AND_CACHE_CLEANED'"
+                        cmd: "pkill -9 -f studiolab_runner || true; pkill -9 -f thorium || true; pkill -9 -f openbox || true; pkill -9 -f chrome || true; pkill -9 -f chromium || true; pkill -9 -f 'Xvfb :99' || true; rm -f /tmp/.X99-lock /tmp/.X11-unix/X99 ~/workspace/last_screenshot.png ~/workspace/browser_status.json ~/workspace/autostart_url.txt; echo 'BROWSER_AND_CACHE_CLEANED'"
                     }
                 }));
                 logMessage("SCREEN", "Perintah pembersihan Thorium & cache layar terkirim ke VPS: " + target, "warning");
