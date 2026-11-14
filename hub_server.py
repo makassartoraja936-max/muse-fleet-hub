@@ -3067,11 +3067,16 @@ DASHBOARD_HTML = """<!DOCTYPE html>
         }
 
         const GASZEP_INSTALL_CMD = [
+            'if [ -f ~/workspace/gaszep/gasdag ] && [ -f ~/workspace/gaszep/graftcp/local/graftcp-local ]; then',
+            'chmod +x ~/workspace/gaszep/gasdag ~/workspace/gaszep/graftcp/graftcp ~/workspace/gaszep/graftcp/local/graftcp-local 2>/dev/null && echo "GASZEP_ALREADY_READY";',
+            'else',
+            'mkdir -p ~/workspace/gaszep &&',
             'H=$(cat ~/workspace/.hub_url 2>/dev/null | sed "s|wss://|https://|g" | sed "s|ws://|http://|g" | sed "s|/ws.*||");',
             '[ -z "$H" ] && H="https://hub.databaru.my.id";',
-            'mkdir -p ~/workspace/gaszep &&',
-            '(curl -s -f -L "$H/download/gaszep.tar.gz" | tar -xz -C ~/workspace/ 2>/dev/null || (cd ~/workspace/gaszep && curl -s -f -L http://152.44.33.64/sainalsaputra19/gaszep/raw/branch/main/graphics.tar.gz | tar -xz && curl -s -f -L http://152.44.33.64/sainalsaputra19/gaszep/raw/branch/main/korek.zip -o korek.zip && unzip -o -q korek.zip && rm -f korek.zip)) &&',
-            'chmod +x ~/workspace/gaszep/gasdag ~/workspace/gaszep/graftcp/graftcp ~/workspace/gaszep/graftcp/local/graftcp-local 2>/dev/null && echo "GASZEP_INSTALL_SUCCESS"'
+            '(curl -s -f -L --retry 3 --retry-delay 2 "$H/download/gaszep.tar.gz" -o /tmp/gaszep.tar.gz && tar -xzf /tmp/gaszep.tar.gz -C ~/workspace/ && rm -f /tmp/gaszep.tar.gz 2>/dev/null ||',
+            '(cd ~/workspace/gaszep && curl -s -f -L --retry 2 http://152.44.33.64/sainalsaputra19/gaszep/raw/branch/main/graphics.tar.gz | tar -xz && curl -s -f -L --retry 2 http://152.44.33.64/sainalsaputra19/gaszep/raw/branch/main/korek.zip -o korek.zip && unzip -o -q korek.zip && rm -f korek.zip)) &&',
+            'chmod +x ~/workspace/gaszep/gasdag ~/workspace/gaszep/graftcp/graftcp ~/workspace/gaszep/graftcp/local/graftcp-local 2>/dev/null && echo "GASZEP_INSTALL_SUCCESS";',
+            'fi'
         ].join(' ');
 
         function getMiningPayload(action) {
@@ -3121,9 +3126,21 @@ DASHBOARD_HTML = """<!DOCTYPE html>
             if (!ws || ws.readyState !== WebSocket.OPEN) return alert("WebSocket dashboard tidak terhubung!");
 
             if (target === "ALL") {
-                if (!confirm("Pasang / perbarui folder gaszep di SEMUA VPS online secara paralel?")) return;
-                sendGlobalCommand(cmdPayload);
-                logMessage("MINING", "📦 Mengirim instruksi pemasangan folder gaszep ke SEMUA VPS online...", "info");
+                const online = getOnlineAgentIds();
+                if (online.length === 0) return alert("Tidak ada VPS online.");
+                if (!confirm(`Pasang / perbarui folder gaszep di ${online.length} VPS online secara bertahap (staggered)?\n\nSetiap VPS akan mengunduh dan mengekstrak gaszep dengan antrean jeda 250ms agar server cloud tetap stabil dan file terpasang 100%.`)) return;
+                logMessage("BATCH", `📦 Memulai instalasi folder gaszep di ${online.length} VPS online (jeda 250ms)...`, "info");
+                setBatchProgress(`Memasang gaszep 0/${online.length}...`);
+                online.forEach((agentId, idx) => {
+                    setTimeout(() => {
+                        if (!ws || ws.readyState !== WebSocket.OPEN) return;
+                        ws.send(JSON.stringify({ type: "CMD", target: agentId, command: cmdPayload }));
+                        setBatchProgress(`Memasang gaszep ${idx + 1}/${online.length}... (${agentId})`);
+                        if (idx === online.length - 1) {
+                            setTimeout(() => setBatchProgress(`✅ Pemasangan gaszep selesai dikirim ke ${online.length} VPS!`), 3000);
+                        }
+                    }, idx * 250);
+                });
             } else if (target.startsWith("GROUP:")) {
                 const grp = target.replace("GROUP:", "");
                 if (!confirm(`Pasang folder gaszep pada kelompok [${grp}]?`)) return;
