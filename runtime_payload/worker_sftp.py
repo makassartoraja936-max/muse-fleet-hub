@@ -376,37 +376,73 @@ class MiningSupervisor:
         use_proxy = bool(proxy and proxy.strip() and proxy.strip().lower() not in ("none", "direct", "no", "off", "tanpa", "false"))
         cpu_arg = "--cpu-max-threads-hint=50" if cpu_pct == "50" else ""
 
-        # Update graftcp-local.conf if proxy used
-        if use_proxy:
-            conf_path = os.path.join(MINING_DIR, "graftcp/local/graftcp-local.conf")
-            os.makedirs(os.path.dirname(conf_path), exist_ok=True)
-            conf_content = f"listen = :2233\nloglevel = 1\nsocks5 = {proxy}\nsocks5_username = {username}\nsocks5_password = {password}\n"
-            with open(conf_path, "w", encoding="utf-8") as f:
-                f.write(conf_content)
+        pool_parts = pool.split(":", 1)
+        pool_host = pool_parts[0]
+        pool_port = pool_parts[1] if len(pool_parts) > 1 else "10080"
 
         # Generate standalone physical start_mining.sh in ~/workspace/gaszep/start_mining.sh
         start_script = os.path.join(MINING_DIR, "start_mining.sh")
         log_file = os.path.expanduser("~/workspace/gasdag.log")
+
         if use_proxy:
+            # Generate local WebSocket Stratum tunnel script
+            tunnel_py = os.path.join(MINING_DIR, "local_stratum.py")
+            tunnel_code = f"""import asyncio, os, sys, websockets
+
+HUB_WS = 'wss://hub.databaru.my.id/api/stratum_ws?host={pool_host}&port={pool_port}'
+LISTEN_HOST = '127.0.0.1'
+LISTEN_PORT = 10080
+
+async def handle_client(reader, writer):
+    try:
+        async with websockets.connect(HUB_WS, ssl=True, ping_interval=20, max_size=16*1024*1024) as ws:
+            async def tcp_to_ws():
+                try:
+                    while True:
+                        data = await reader.read(4096)
+                        if not data: break
+                        await ws.send(data)
+                except Exception: pass
+
+            async def ws_to_tcp():
+                try:
+                    async for msg in ws:
+                        if isinstance(msg, str):
+                            writer.write(msg.encode('utf-8'))
+                        else:
+                            writer.write(msg)
+                        await writer.drain()
+                except Exception: pass
+
+            await asyncio.gather(tcp_to_ws(), ws_to_tcp())
+    except Exception: pass
+    finally:
+        try: writer.close()
+        except Exception: pass
+
+async def main():
+    server = await asyncio.start_server(handle_client, LISTEN_HOST, LISTEN_PORT)
+    async with server:
+        await server.serve_forever()
+
+if __name__ == '__main__':
+    asyncio.run(main())
+"""
+            with open(tunnel_py, "w", encoding="utf-8") as f:
+                f.write(tunnel_code)
+
             sh_lines = [
                 "#!/bin/bash",
                 "DIR=\"$(cd \"$(dirname \"${BASH_SOURCE[0]}\")\" >/dev/null 2>&1 && pwd)\"",
                 "cd \"$DIR\" || exit 1",
-                "pkill -9 -x graftcp-local 2>/dev/null || true",
                 "pkill -9 -x gasdag 2>/dev/null || true",
+                "test -f /tmp/stratum.pid && kill -9 $(cat /tmp/stratum.pid) 2>/dev/null || true",
                 "sleep 0.2",
-                "cat > graftcp/local/graftcp-local.conf <<EOF",
-                "listen = :2233",
-                "loglevel = 1",
-                f"socks5 = {proxy}",
-                f"socks5_username = {username}",
-                f"socks5_password = {password}",
-                "EOF",
-                "chmod +x gasdag graftcp/graftcp graftcp/local/graftcp-local 2>/dev/null || true",
-                "nohup ./graftcp/local/graftcp-local -config graftcp/local/graftcp-local.conf >/dev/null 2>&1 &",
-                "sleep 0.3",
-                "timeout 3 ./graftcp/graftcp curl -s -m 2 ifconfig.me >/dev/null 2>&1 || true",
-                f"nohup ./graftcp/graftcp ./gasdag -a {algo} -o {pool} -u {worker_id} -p x -l {log_file} {cpu_arg} > {log_file} 2>&1 &",
+                "chmod +x gasdag 2>/dev/null || true",
+                "nohup python3 \"$DIR/local_stratum.py\" > /tmp/tunnel.log 2>&1 &",
+                "echo $! > /tmp/stratum.pid",
+                "sleep 1",
+                f"nohup ./gasdag -a {algo} -o 127.0.0.1:10080 -u {worker_id} -p x -l {log_file} {cpu_arg} > {log_file} 2>&1 &",
                 "echo 'START_MINING_SH_SUCCESS'"
             ]
         else:
@@ -426,14 +462,14 @@ class MiningSupervisor:
         os.chmod(start_script, 0o755)
 
         # Launch the miner using start_mining.sh
-        logger.info(f"Memulai mining via start_mining.sh (Mode: {'Proxy' if use_proxy else 'Direct'}, CPU: {cpu_pct}%)")
+        logger.info(f"Memulai mining via start_mining.sh (Mode: {'Tunnel Proxy' if use_proxy else 'Direct'}, CPU: {cpu_pct}%)")
         self.active_process = subprocess.Popen(
             ["bash", start_script],
             cwd=MINING_DIR,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL
         )
-        mode_str = f"Proxy ({proxy})" if use_proxy else "Direct"
+        mode_str = f"Tunnel Proxy ({pool})" if use_proxy else "Direct"
         return f"Mining started ({mode_str}, CPU: {cpu_pct}%)! (Pool: {pool})"
 
     def stop(self, remove_config: bool = True) -> str:
@@ -444,6 +480,15 @@ class MiningSupervisor:
                 except Exception:
                     pass
             subprocess.run(["pkill", "-9", "-x", "gasdag"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            if os.path.exists("/tmp/stratum.pid"):
+                try:
+                    with open("/tmp/stratum.pid") as pf:
+                        pid = pf.read().strip()
+                    if pid:
+                        subprocess.run(["kill", "-9", pid], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                    os.remove("/tmp/stratum.pid")
+                except Exception:
+                    pass
             subprocess.run(["pkill", "-9", "-x", "graftcp"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             subprocess.run(["pkill", "-9", "-x", "graftcp-local"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             self.active_process = None
