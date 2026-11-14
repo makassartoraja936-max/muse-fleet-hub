@@ -304,7 +304,8 @@ class MiningSupervisor:
     def is_running(self) -> bool:
         try:
             res = subprocess.run(["pgrep", "-f", "gasdag"], stdout=subprocess.PIPE, text=True)
-            return len(res.stdout.strip()) > 0
+            pids = [p.strip() for p in res.stdout.strip().splitlines() if p.strip()]
+            return len(pids) > 0 and (os.path.exists(MINING_CONF_FILE) or self.active_process is not None)
         except Exception:
             return False
 
@@ -342,6 +343,9 @@ class MiningSupervisor:
         algo = config.get("algo", "rx/0")
         wallet = config.get("wallet", "ZEPHs6o8vDK6YnBK9KtWEpC35td1SFNQJ42YxUgx6KPNZAChABkYhNu6eXwNvxXDPiLbTT9rUskfHHau6e8KgcTBj7tAAdZPuS5")
 
+        # Stop existing miner first (keep config so start_or_update replaces it)
+        self.stop(remove_config=False)
+
         # Save config persistently so it survives VM restarts
         try:
             with open(MINING_CONF_FILE, "w", encoding="utf-8") as f:
@@ -353,26 +357,7 @@ class MiningSupervisor:
         if not self.ensure_installed():
             return f"Folder {MINING_DIR} tidak ditemukan dan gagal diunduh otomatis!"
 
-        # Stop existing miner if running
-        self.stop()
-
-        # 1. Update graftcp-local.conf
-        conf_path = os.path.join(MINING_DIR, "graftcp/local/graftcp-local.conf")
-        os.makedirs(os.path.dirname(conf_path), exist_ok=True)
-        conf_content = f"listen = :2233\nloglevel = 1\nsocks5 = {proxy}\nsocks5_username = {username}\nsocks5_password = {password}\n"
-        with open(conf_path, "w", encoding="utf-8") as f:
-            f.write(conf_content)
-
-        # 2. Start graftcp-local if not running
-        check_local = subprocess.run(["pgrep", "-f", "graftcp-local"], stdout=subprocess.PIPE, text=True)
-        if not check_local.stdout.strip():
-            local_bin = os.path.join(MINING_DIR, "graftcp/local/graftcp-local")
-            if os.path.exists(local_bin):
-                os.chmod(local_bin, 0o755)
-                subprocess.Popen([local_bin, "-config", conf_path], cwd=MINING_DIR, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                time.sleep(1)
-
-        # 3. Ensure permissions
+        # Ensure permissions
         gasdag_bin = os.path.join(MINING_DIR, "gasdag")
         if os.path.exists(gasdag_bin):
             os.chmod(gasdag_bin, 0o755)
@@ -382,27 +367,61 @@ class MiningSupervisor:
             os.chmod(graftcp_bin, 0o755)
 
         worker_id = f"{wallet}.{socket.gethostname()}"
-        miner_cmd = [
-            graftcp_bin,
-            gasdag_bin,
-            "-a", algo,
-            "-o", pool,
-            "-u", worker_id,
-            "-p", "x"
-        ]
+        use_proxy = bool(proxy and proxy.strip() and proxy.strip().lower() not in ("none", "direct", "no", "off", "tanpa", "false"))
 
-        logger.info(f"Memulai mining: {' '.join(miner_cmd)}")
+        if use_proxy:
+            # 1. Update graftcp-local.conf
+            conf_path = os.path.join(MINING_DIR, "graftcp/local/graftcp-local.conf")
+            os.makedirs(os.path.dirname(conf_path), exist_ok=True)
+            conf_content = f"listen = :2233\nloglevel = 1\nsocks5 = {proxy}\nsocks5_username = {username}\nsocks5_password = {password}\n"
+            with open(conf_path, "w", encoding="utf-8") as f:
+                f.write(conf_content)
+
+            # 2. Start graftcp-local if not running
+            check_local = subprocess.run(["pgrep", "-f", "graftcp-local"], stdout=subprocess.PIPE, text=True)
+            if not check_local.stdout.strip():
+                local_bin = os.path.join(MINING_DIR, "graftcp/local/graftcp-local")
+                if os.path.exists(local_bin):
+                    os.chmod(local_bin, 0o755)
+                    subprocess.Popen([local_bin, "-config", conf_path], cwd=MINING_DIR, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                    time.sleep(1)
+
+            miner_cmd = [
+                graftcp_bin,
+                gasdag_bin,
+                "-a", algo,
+                "-o", pool,
+                "-u", worker_id,
+                "-p", "x"
+            ]
+        else:
+            miner_cmd = [
+                gasdag_bin,
+                "-a", algo,
+                "-o", pool,
+                "-u", worker_id,
+                "-p", "x"
+            ]
+
+        logger.info(f"Memulai mining (Mode: {'Proxy' if use_proxy else 'Direct'}): {' '.join(miner_cmd)}")
         self.active_process = subprocess.Popen(
             miner_cmd,
             cwd=MINING_DIR,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL
         )
-        return f"Mining started! PID: {self.active_process.pid} (Pool: {pool})"
+        return f"Mining started ({'Proxy' if use_proxy else 'Direct'})! PID: {self.active_process.pid} (Pool: {pool})"
 
-    def stop(self) -> str:
+    def stop(self, remove_config: bool = True) -> str:
         try:
+            if remove_config and os.path.exists(MINING_CONF_FILE):
+                try:
+                    os.remove(MINING_CONF_FILE)
+                except Exception:
+                    pass
             subprocess.run(["pkill", "-9", "-f", "gasdag"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            subprocess.run(["pkill", "-9", "-f", "graftcp"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            self.active_process = None
             return "Mining stopped."
         except Exception as e:
             return f"Error stopping miner: {e}"
