@@ -980,7 +980,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                             <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
                                 <button class="btn btn-sm" style="background: #6e40c9; border-color: #8b5cf6; color: #fff; font-weight: bold; padding: 5px 12px;" onclick="promptSetSelectedGroup()" title="Kelompokkan VPS terpilih (misal: StudioLab, YouTube, Umum)">🏷️ Setel Kelompok</button>
                                 <button class="btn btn-sm" style="background: #1f6feb; border-color: #388bfd; font-weight: bold; padding: 5px 12px;" onclick="openSelectedShellModal()">💻 Shell Terpilih</button>
-                                <button class="btn btn-sm" style="background: #238636; border-color: #2ea043; color: #fff; font-weight: bold; padding: 5px 12px;" onclick="executeSelectedBatchMiningStart()" title="Mulai Mining pada VPS terpilih">⛏️ Start Mining Terpilih</button>
+                                <button class="btn btn-sm" style="background: #238636; border-color: #2ea043; color: #fff; font-weight: bold; padding: 5px 12px;" onclick="executeSelectedBatchMiningStart()" title="Mulai Mining pada VPS terpilih">🚀 Terapkan & Mulai Mining Terpilih</button>
                                 <button class="btn btn-sm" style="background: #b62324; border-color: #da3633; color: #fff; font-weight: bold; padding: 5px 12px;" onclick="executeSelectedBatchMiningStop()" title="Hentikan Mining pada VPS terpilih">⏹️ Stop Mining Terpilih</button>
                                 <button class="btn btn-sm" style="background: #1a7f37; border-color: #2da44e; color: #fff; font-weight: bold; padding: 5px 12px;" onclick="executeSelectedBatchInstallGaszep()" title="Pasang / Ekstrak folder Gaszep pada VPS terpilih">📦 Pasang Gaszep Terpilih</button>
                                 <button class="btn btn-sm" style="background: #238636; border-color: #2ea043; font-weight: bold; padding: 5px 12px;" onclick="executeSelectedBatchSelfHeal()">🔄 Self-Heal Terpilih</button>
@@ -1144,8 +1144,8 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                     </div>
 
                     <div class="btn-group" style="margin-top: 10px; display: flex; flex-wrap: wrap; gap: 8px;">
-                        <button class="btn btn-primary" onclick="sendMiningCommand('START')">
-                            ▶️ Start / Update Mining di Target Terpilih
+                        <button class="btn btn-primary" onclick="sendMiningCommand('START')" style="background: #10b981; border-color: #059669; font-weight: 700;">
+                            🚀 Terapkan & Mulai Mining di Target Terpilih
                         </button>
                         <button class="btn btn-danger" onclick="sendMiningCommand('STOP')">
                             ⏹️ Hentikan Mining di Target Terpilih
