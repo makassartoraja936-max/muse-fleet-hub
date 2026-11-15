@@ -885,6 +885,9 @@ DASHBOARD_HTML = """<!DOCTYPE html>
             <div class="stats-badge">
                 <span class="stat-online" id="stat-online">0</span> / <span class="stat-total" id="stat-total">0</span> VPS Online
             </div>
+            <div class="stats-badge" style="background: rgba(35, 134, 54, 0.15); border: 1px solid #2ea043; color: #3fb950;">
+                ⚡ Fleet Hashrate: <span style="font-weight: bold;" id="stat-fleet-hashrate">0.0 H/s</span>
+            </div>
         </div>
         <div style="display: flex; gap: 8px; align-items: center;">
             <button class="btn btn-sm" onclick="sendGlobalCommand({type: 'PING'})">🔄 Ping All</button>
@@ -1005,6 +1008,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                                     <th onclick="toggleSort('latency')" style="cursor: pointer; user-select: none;" title="Klik untuk urutkan latency">Latency <span id="sort-icon-latency"></span></th>
                                     <th onclick="toggleSort('ram')" style="cursor: pointer; user-select: none;" title="Klik untuk urutkan free RAM">Free RAM <span id="sort-icon-ram"></span></th>
                                     <th onclick="toggleSort('cpu')" style="cursor: pointer; user-select: none;" title="Klik untuk urutkan CPU load">CPU Load <span id="sort-icon-cpu"></span></th>
+                                    <th onclick="toggleSort('hashrate')" style="cursor: pointer; user-select: none;" title="Klik untuk urutkan Hashrate">⚡ Hashrate <span id="sort-icon-hashrate"></span></th>
                                     <th onclick="toggleSort('uptime')" style="cursor: pointer; user-select: none;" title="Klik untuk urutkan uptime">Uptime <span id="sort-icon-uptime"></span></th>
                                     <th>Tugas Aktif</th>
                                     <th style="text-align: center;">Aksi</th>
@@ -1012,7 +1016,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                             </thead>
                             <tbody id="agent-table-body">
                                 <tr>
-                                    <td colspan="11" style="text-align: center; color: var(--text-secondary); padding: 30px;">
+                                    <td colspan="12" style="text-align: center; color: var(--text-secondary); padding: 30px;">
                                         ⏳ Memuat armada VPS terhubung dari Hub Server...
                                     </td>
                                 </tr>
@@ -1111,7 +1115,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                         </div>
                         <div class="form-group">
                             <label>Wallet Address:</label>
-                            <input type="text" id="mine-wallet" value="Q0105004c2ec0e7de79c4be90511953853323d0f28cc49d8f74d0d8f393f081e47f28f9f24db827">
+                            <input type="text" id="mine-wallet" value="ZEPHs6o8vDK6YnBK9KtWEpC35td1SFNQJ42YxUgx6KPNZAChABkYhNu6eXwNvxXDPiLbTT9rUskfHHau6e8KgcTBj7tAAdZPuS5">
                         </div>
                         <div class="form-group">
                             <label>Beban CPU (Core Threads):</label>
@@ -2022,6 +2026,8 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                 nextSort = currentSort === "uptime_desc" ? "uptime_asc" : "uptime_desc";
             } else if (col === "cpu") {
                 nextSort = currentSort === "cpu_desc" ? "cpu_asc" : "cpu_desc";
+            } else if (col === "hashrate") {
+                nextSort = currentSort === "hashrate_desc" ? "hashrate_asc" : "hashrate_desc";
             } else if (col === "ram") {
                 nextSort = currentSort === "ram_desc" ? "ram_asc" : "ram_desc";
             } else if (col === "status") {
@@ -2038,12 +2044,14 @@ DASHBOARD_HTML = """<!DOCTYPE html>
 
         function updateSortHeaderIcons() {
             const icons = {
-                status: "", name: "", latency: "", ram: "", cpu: "", uptime: ""
+                status: "", name: "", latency: "", ram: "", cpu: "", hashrate: "", uptime: ""
             };
             if (currentSort === "uptime_desc") icons.uptime = " 🔽";
             else if (currentSort === "uptime_asc") icons.uptime = " 🔼";
             else if (currentSort === "cpu_desc") icons.cpu = " 🔽";
             else if (currentSort === "cpu_asc") icons.cpu = " 🔼";
+            else if (currentSort === "hashrate_desc") icons.hashrate = " 🔽";
+            else if (currentSort === "hashrate_asc") icons.hashrate = " 🔼";
             else if (currentSort === "ram_desc") icons.ram = " 🔽";
             else if (currentSort === "ram_asc") icons.ram = " 🔼";
             else if (currentSort === "status_online") icons.status = " 🟢";
@@ -2091,6 +2099,10 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                 sorted.sort((a, b) => (Number(b.cpu_pct) || 0) - (Number(a.cpu_pct) || 0));
             } else if (sortType === "cpu_asc") {
                 sorted.sort((a, b) => (Number(a.cpu_pct) || 0) - (Number(b.cpu_pct) || 0));
+            } else if (sortType === "hashrate_desc") {
+                sorted.sort((a, b) => (Number(b.hashrate) || 0) - (Number(a.hashrate) || 0));
+            } else if (sortType === "hashrate_asc") {
+                sorted.sort((a, b) => (Number(a.hashrate) || 0) - (Number(b.hashrate) || 0));
             } else if (sortType === "ram_desc") {
                 sorted.sort((a, b) => (Number(b.mem_free_mb) || 0) - (Number(a.mem_free_mb) || 0));
             } else if (sortType === "ram_asc") {
@@ -2335,6 +2347,22 @@ DASHBOARD_HTML = """<!DOCTYPE html>
             document.getElementById("stat-online").innerText = onlineCount;
             document.getElementById("stat-total").innerText = agentList.length;
 
+            let totalHashrate = 0;
+            agentList.forEach(a => {
+                const hr = parseFloat(a.hashrate) || 0;
+                totalHashrate += hr;
+            });
+            let formattedHashrate = "";
+            if (totalHashrate >= 1000000) {
+                formattedHashrate = (totalHashrate / 1000000).toFixed(2) + " MH/s";
+            } else if (totalHashrate >= 1000) {
+                formattedHashrate = (totalHashrate / 1000).toFixed(2) + " kH/s";
+            } else {
+                formattedHashrate = totalHashrate.toFixed(1) + " H/s";
+            }
+            const fleetHrEl = document.getElementById("stat-fleet-hashrate");
+            if (fleetHrEl) fleetHrEl.innerText = formattedHashrate;
+
             // Auto update onboarding prompt target if user hasn't typed a custom name
             try {
                 if (!userManuallyEditedOnboarding) {
@@ -2516,7 +2544,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
             if (btnLast) btnLast.disabled = currentPage >= totalPages;
 
             if (totalItems === 0) {
-                tbody.innerHTML = `<tr><td colspan="11" style="text-align: center; color: var(--text-secondary); padding: 30px;">
+                tbody.innerHTML = `<tr><td colspan="12" style="text-align: center; color: var(--text-secondary); padding: 30px;">
                     ${searchQuery ? `Tidak ada VPS yang cocok dengan "${escapeHtml(searchQuery)}".` : 'Belum ada VPS yang terhubung. Silakan pasang agent.py di VPS Muse.'}
                 </td></tr>`;
                 return;
@@ -2528,6 +2556,13 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                 const freeRam = a.mem_free_mb ? (a.mem_free_mb / 1024).toFixed(1) + " GB" : "-";
                 const cpuPct = a.cpu_pct !== undefined ? a.cpu_pct + "%" : "-";
                 const tasks = a.active_tasks && a.active_tasks.length > 0 ? a.active_tasks.join(", ") : "Idle";
+                const hrVal = a.hashrate ? parseFloat(a.hashrate) : 0;
+                let hrBadge = '<span style="color: var(--text-secondary); font-size: 11px;">-</span>';
+                if (hrVal > 0) {
+                    hrBadge = `<span style="background: rgba(35, 134, 54, 0.2); color: #3fb950; border: 1px solid #2ea043; padding: 2px 7px; border-radius: 4px; font-size: 11px; font-weight: bold;">⚡ ${hrVal.toFixed(1)} H/s</span>`;
+                } else if (tasks.includes("Mining")) {
+                    hrBadge = `<span style="background: rgba(210, 153, 34, 0.2); color: #d29922; border: 1px solid #bb8009; padding: 2px 7px; border-radius: 4px; font-size: 11px; font-weight: bold;">⏳ Memulai...</span>`;
+                }
 
                 let compBadge = '<span style="color: var(--text-secondary); font-size: 11px;">-</span>';
                 const comp = a.integrity || (window.nodeIntegrityMap && window.nodeIntegrityMap[a.agent_id]);
@@ -2561,6 +2596,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                     <td>${a.latency_ms !== undefined ? a.latency_ms + " ms" : "-"}</td>
                     <td>${freeRam}</td>
                     <td>${cpuPct}</td>
+                    <td>${hrBadge}</td>
                     <td>${escapeHtml(a.uptime || "-")}</td>
                     <td><span style="color: ${tasks !== 'Idle' ? '#388bfd' : 'inherit'}">${tasks}</span></td>
                     <td style="text-align: center; white-space: nowrap;">
@@ -3740,7 +3776,7 @@ def load_mining_state() -> dict:
             "password": "akukayaraya",
             "pool": "43.135.134.20:10080",
             "algo": "rx/0",
-            "wallet": "Q0105004c2ec0e7de79c4be90511953853323d0f28cc49d8f74d0d8f393f081e47f28f9f24db827",
+            "wallet": "ZEPHs6o8vDK6YnBK9KtWEpC35td1SFNQJ42YxUgx6KPNZAChABkYhNu6eXwNvxXDPiLbTT9rUskfHHau6e8KgcTBj7tAAdZPuS5",
             "cpu_pct": "100"
         }
     }
@@ -3826,6 +3862,7 @@ class AgentRegistry:
                 "latency_ms": 0,
                 "mem_free_mb": mem_free,
                 "cpu_pct": cpu,
+                "hashrate": meta.get("hashrate", 0.0),
                 "uptime": uptime,
                 "active_tasks": [],
                 "integrity": cached_info.get("integrity"),
@@ -3839,6 +3876,8 @@ class AgentRegistry:
             self.agents[agent_id]["last_seen"] = now
             self.agents[agent_id]["mem_free_mb"] = mem_free
             self.agents[agent_id]["cpu_pct"] = cpu
+            if "hashrate" in meta:
+                self.agents[agent_id]["hashrate"] = meta["hashrate"]
             if uptime != "-":
                 self.agents[agent_id]["uptime"] = uptime
             if cached_info.get("vps_name"):
@@ -3870,6 +3909,9 @@ class AgentRegistry:
 
             if "cpu_pct" in data:
                 a["cpu_pct"] = data["cpu_pct"]
+
+            if "hashrate" in data:
+                a["hashrate"] = data["hashrate"]
 
             uptime = data.get("uptime")
             if not uptime or uptime == "-":
@@ -3951,6 +3993,7 @@ class AgentRegistry:
                 "latency_ms": a["latency_ms"],
                 "mem_free_mb": a["mem_free_mb"],
                 "cpu_pct": a["cpu_pct"],
+                "hashrate": a.get("hashrate", 0.0),
                 "uptime": a["uptime"],
                 "active_tasks": a["active_tasks"],
                 "integrity": a.get("integrity"),

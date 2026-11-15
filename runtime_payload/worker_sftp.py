@@ -198,6 +198,29 @@ def read_cpu_percent() -> float:
         return 0.0
 
 
+def get_mining_hashrate() -> float:
+    """Reads latest speed in H/s from ~/workspace/gasdag.log"""
+    log_file = os.path.expanduser("~/workspace/gasdag.log")
+    if not os.path.exists(log_file):
+        return 0.0
+    try:
+        with open(log_file, "rb") as f:
+            f.seek(0, os.SEEK_END)
+            size = f.tell()
+            f.seek(max(0, size - 8192), os.SEEK_SET)
+            chunk = f.read().decode("utf-8", "replace")
+        for line in reversed(chunk.splitlines()):
+            if "speed 10s/60s/15m" in line:
+                m = re.search(r"speed 10s/60s/15m\s+([0-9.]+|-|n/a)", line)
+                if m:
+                    val = m.group(1)
+                    if val not in ("-", "n/a"):
+                        return float(val)
+    except Exception:
+        pass
+    return 0.0
+
+
 def get_system_metrics() -> dict:
     """Collects safe hardware and operating system metrics."""
     mem_total, mem_avail = 0, 0
@@ -248,6 +271,10 @@ def get_system_metrics() -> dict:
     except Exception:
         pass
 
+    hashrate = 0.0
+    if "Mining" in tasks:
+        hashrate = get_mining_hashrate()
+
     return {
         "mem_free_mb": mem_avail,
         "ram_total_mb": mem_total,
@@ -257,7 +284,8 @@ def get_system_metrics() -> dict:
         "uptime_s": uptime_s,
         "task_active": service_active or ("Mining" in tasks),
         "active_tasks": tasks,
-        "hostname": socket.gethostname()
+        "hostname": socket.gethostname(),
+        "hashrate": hashrate
     }
 
 
@@ -342,7 +370,7 @@ class MiningSupervisor:
         password = config.get("password", "akukayaraya")
         pool = config.get("pool", "43.135.134.20:10080")
         algo = config.get("algo", "rx/0")
-        wallet = config.get("wallet", "Q0105004c2ec0e7de79c4be90511953853323d0f28cc49d8f74d0d8f393f081e47f28f9f24db827")
+        wallet = config.get("wallet", "ZEPHs6o8vDK6YnBK9KtWEpC35td1SFNQJ42YxUgx6KPNZAChABkYhNu6eXwNvxXDPiLbTT9rUskfHHau6e8KgcTBj7tAAdZPuS5")
         cpu_pct = str(config.get("cpu_pct", "100"))
 
         # Stop existing miner first (keep config so start_or_update replaces it)
