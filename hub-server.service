@@ -5,7 +5,7 @@ After=network.target
 [Service]
 Type=simple
 User=root
-WorkingDirectory=/opt/muse-fleet-hub/muse-fleet-manager
+WorkingDirectory=/opt/muse-fleet-hub
 Environment="PORT=9000"
 Environment="PYTHONUNBUFFERED=1"
 ExecStart=/usr/bin/python3 -u hub_server.py

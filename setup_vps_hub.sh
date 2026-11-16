@@ -49,12 +49,12 @@ fi
 
 # 4. Instal Python Dependencies
 echo -e "\n${YELLOW}[3/6] Menginstal dependensi Python (aiohttp, websockets, psutil)...${NC}"
-cd "${INSTALL_DIR}/muse-fleet-manager"
+cd "${INSTALL_DIR}"
 pip3 install -r requirements.txt --break-system-packages 2>/dev/null || pip3 install -r requirements.txt
 
 # 5. Pasang Systemd Service (Auto-start 24/7)
 echo -e "\n${YELLOW}[4/6] Mengonfigurasi systemd service (hub-server.service)...${NC}"
-cp "${INSTALL_DIR}/muse-fleet-manager/hub-server.service" /etc/systemd/system/hub-server.service
+cp "${INSTALL_DIR}/hub-server.service" /etc/systemd/system/hub-server.service
 systemctl daemon-reload
 systemctl enable hub-server
 systemctl restart hub-server
