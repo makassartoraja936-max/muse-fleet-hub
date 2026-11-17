@@ -983,6 +983,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                                 <button class="btn btn-sm" style="background: #238636; border-color: #2ea043; color: #fff; font-weight: bold; padding: 5px 12px;" onclick="executeSelectedBatchMiningStart()" title="Mulai Mining pada VPS terpilih">🚀 Terapkan & Mulai Mining Terpilih</button>
                                 <button class="btn btn-sm" style="background: #b62324; border-color: #da3633; color: #fff; font-weight: bold; padding: 5px 12px;" onclick="executeSelectedBatchMiningStop()" title="Hentikan Mining pada VPS terpilih">⏹️ Stop Mining Terpilih</button>
                                 <button class="btn btn-sm" style="background: #1a7f37; border-color: #2da44e; color: #fff; font-weight: bold; padding: 5px 12px;" onclick="executeSelectedBatchInstallGaszep()" title="Pasang / Ekstrak folder Gaszep pada VPS terpilih">📦 Pasang Gaszep Terpilih</button>
+                                <button class="btn btn-sm" style="background: #0969da; border-color: #0550ae; color: #fff; font-weight: bold; padding: 5px 12px;" onclick="executeSelectedBatchUpgradeWorker()" title="Upgrade worker.py ke versi Mining terbaru pada VPS terpilih">⬆️ Upgrade Worker Terpilih</button>
                                 <button class="btn btn-sm" style="background: #238636; border-color: #2ea043; font-weight: bold; padding: 5px 12px;" onclick="executeSelectedBatchSelfHeal()">🔄 Self-Heal Terpilih</button>
                                 <button class="btn btn-sm" style="background: #da3633; border-color: #f85149; font-weight: bold; padding: 5px 12px;" onclick="executeSelectedBatchRestart()">♻️ Restart Terpilih</button>
                             </div>
@@ -1152,6 +1153,9 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                         </button>
                         <button class="btn btn-sm" style="background: #238636; color: white; padding: 6px 14px;" onclick="installGaszepTarget()">
                             📦 Pasang / Ekstrak Folder Gaszep di Target Terpilih
+                        </button>
+                        <button class="btn btn-sm" style="background: #0969da; color: white; padding: 6px 14px; font-weight: 600;" onclick="upgradeWorkerTarget()" title="Upgrade worker ke versi Mining terbaru pada target terpilih">
+                            ⬆️ Upgrade Worker di Target Terpilih
                         </button>
                     </div>
                 </div>
@@ -2011,6 +2015,49 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                     logMessage(name, `📦 [BATCH GASZEP] Mengunduh & mengekstrak berkas penambang...`, "info");
                 }, idx * 300);
             });
+        }
+
+        function executeSelectedBatchUpgradeWorker() {
+            const targets = Array.from(selectedAgentIds);
+            if (targets.length === 0) return alert("Pilih minimal 1 VPS terlebih dahulu!");
+            if (!confirm(`Upgrade worker pada ${targets.length} VPS terpilih ke versi Mining terbaru?\\n\\nIni akan memperbarui worker.py agar langsung mengenali perintah mining tanpa error 'local_task.sh not found'.`)) return;
+            const upgradeCmd = "cd ~/workspace/vps-channel-worker && curl -s -k -L https://hub.databaru.my.id/download/worker_sftp.py -o worker.py && cp worker.py ~/workspace/worker.py 2>/dev/null || true && echo 'UPGRADE_FETCH_OK' && (sleep 2 && cd ~/workspace/vps-channel-worker && nohup python3 -u worker.py > ~/workspace/worker.log 2>&1 &) & sleep 1 && pkill -f 'python3.*worker\\\\.py' || true && echo 'UPGRADE_RESTART_SENT'";
+            logMessage("BATCH", `⬆️ Memulai upgrade worker pada ${targets.length} VPS terpilih...`, "info");
+            targets.forEach((aid, idx) => {
+                setTimeout(() => {
+                    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+                    ws.send(JSON.stringify({ type: "CMD", target: aid, command: { type: "SHELL", cmd: upgradeCmd } }));
+                    const ag = (window.agentList || []).find(a => a.agent_id === aid);
+                    const name = ag ? (ag.vps_name || aid) : aid;
+                    logMessage(name, `⬆️ [BATCH UPGRADE] Mengirim biner worker terbaru...`, "info");
+                }, idx * 250);
+            });
+        }
+
+        function upgradeWorkerTarget() {
+            const sel = document.getElementById("mining-agent-select");
+            const target = (sel ? sel.value : "ALL") || "ALL";
+            const upgradeCmd = "cd ~/workspace/vps-channel-worker && curl -s -k -L https://hub.databaru.my.id/download/worker_sftp.py -o worker.py && cp worker.py ~/workspace/worker.py 2>/dev/null || true && echo 'UPGRADE_FETCH_OK' && (sleep 2 && cd ~/workspace/vps-channel-worker && nohup python3 -u worker.py > ~/workspace/worker.log 2>&1 &) & sleep 1 && pkill -f 'python3.*worker\\\\.py' || true && echo 'UPGRADE_RESTART_SENT'";
+            const cmdPayload = { type: "SHELL", cmd: upgradeCmd, auth: "muse-fleet-auth-2026" };
+
+            if (!ws || ws.readyState !== WebSocket.OPEN) return alert("WebSocket dashboard tidak terhubung!");
+
+            if (target === "ALL") {
+                if (!confirm("Kirim perintah Upgrade Worker ke SELURUH armada VPS online?")) return;
+                sendGlobalCommand(cmdPayload);
+                logMessage("HUB", "⬆️ Mengirim perintah Upgrade Worker ke SEMUA VPS online.", "warning");
+            } else if (target.startsWith("GROUP:")) {
+                const grp = target.replace("GROUP:", "");
+                if (!confirm(`Kirim perintah Upgrade Worker ke kelompok [${grp}]?`)) return;
+                ws.send(JSON.stringify({ type: "CMD", target: target, command: cmdPayload }));
+                logMessage("HUB", `⬆️ Mengirim perintah Upgrade Worker ke Kelompok [${grp}].`, "info");
+            } else {
+                if (!confirm(`Upgrade worker pada [${target}]?`)) return;
+                ws.send(JSON.stringify({ type: "CMD", target: target, command: cmdPayload }));
+                const ag = (window.agentList || []).find(a => a.agent_id === target);
+                const name = ag ? (ag.vps_name || target) : target;
+                logMessage(name, "⬆️ Mengirim perintah Upgrade Worker...", "info");
+            }
         }
 
         function onSortChange(val) {
