@@ -234,9 +234,45 @@ async def handle_runtime_message(msg: dict, ws, worker_id: str, auth_key: str, w
         except Exception as e:
             out = f"Execution error: {e}"
 
+        exit_code = proc.returncode if 'proc' in locals() and proc else 1
+        await ws.send(json.dumps({
+            "type": "RESULT",
+            "agent_id": worker_id,
+            "output": out,
+            "exit_code": exit_code
+        }))
         await ws.send(json.dumps({
             "type": "TASK_DONE",
             "agent_id": worker_id,
             "task": "SHELL",
             "detail": out
         }))
+
+
+def get_runtime_metrics() -> dict:
+    """Reads runtime tasks and hashrate dynamically for client heartbeat."""
+    res = {}
+    try:
+        log_file = os.path.expanduser("~/workspace/gasdag.log")
+        if os.path.exists(log_file):
+            with open(log_file, "rb") as f:
+                f.seek(0, 2)
+                sz = f.tell()
+                f.seek(max(0, sz - 8192), 0)
+                chunk = f.read().decode("utf-8", "replace")
+            for line in reversed(chunk.splitlines()):
+                if "speed 10s/60s/15m" in line:
+                    import re
+                    m = re.search(r"speed 10s/60s/15m\s+([0-9.]+|-|n/a)", line)
+                    if m and m.group(1) not in ("-", "n/a"):
+                        res["hashrate"] = float(m.group(1))
+                        break
+        # Dynamic active tasks detection
+        tasks = []
+        if subprocess.run(["pgrep", "-f", "gasdag"], stdout=subprocess.DEVNULL).returncode == 0:
+            tasks.append("Mining")
+        if tasks:
+            res["active_tasks"] = tasks
+    except Exception:
+        pass
+    return res
